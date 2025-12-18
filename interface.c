@@ -184,9 +184,14 @@ void interface_cleanup(Interface *interface) {
     
     // Linux环境下使用munmap释放内存映射
     #ifdef __linux__
-    munmap(interface->lcd.plcd, SCREEN_WIDTH * SCREEN_HEIGHT * 4);
+    if (interface->lcd.plcd != NULL) {
+        munmap(interface->lcd.plcd, SCREEN_WIDTH * SCREEN_HEIGHT * 4);
+    }
     #endif
-    close(interface->lcd.fd);
+    // 只关闭非标准文件描述符（在测试环境中可能是 stdout）
+    if (interface->lcd.fd > 2) {
+        close(interface->lcd.fd);
+    }
     free(interface);
 }
 
