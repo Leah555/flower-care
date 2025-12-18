@@ -6,6 +6,7 @@
 #endif
 #include "lcd.h"
 #include "event.h"
+#include "dao/dao.h"
 #include "dao/plants_dao.h"
 #include "dao/care_records_dao.h"
 #include "dao/reminders_dao.h"
@@ -40,7 +41,13 @@ typedef struct Button {
     int btn_text_color;
 } Button;
 
-typedef struct {
+// 前向声明Interface结构体
+typedef struct Interface Interface;
+
+// 全局接口实例指针，用于回调函数访问
+extern Interface* interface_instance;
+
+typedef struct Interface {
     ScreenType current_screen;
     LCD lcd;
     Plant *plants;

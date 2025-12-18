@@ -5,20 +5,61 @@
 #include <unistd.h>
 #include "font_1.h"
 
+// 全局接口实例指针定义
+Interface* interface_instance = NULL;
+
 // 植物数据收集回调函数
 static void plants_collect_callback(const Plant* plant) {
-    // 这个函数将在DAO层被调用，用于收集植物数据
-    // 实际的数据收集将在interface_navigate_to函数中实现
+    if (!interface_instance || !plant) return;
+    
+    Interface *interface = interface_instance;
+    
+    if (interface->plant_count >= interface->plants_capacity) {
+        interface->plants_capacity += 10; // 每次增加10个容量
+        Plant *temp = realloc(interface->plants, interface->plants_capacity * sizeof(Plant));
+        if (!temp) return; // 内存分配失败
+        interface->plants = temp;
+    }
+    
+    // 复制植物数据
+    memcpy(&interface->plants[interface->plant_count], plant, sizeof(Plant));
+    interface->plant_count++;
 }
 
 // 养护记录数据收集回调函数
 static void care_records_collect_callback(const CareRecord* record) {
-    // 这个函数将在DAO层被调用，用于收集养护记录数据
+    if (!interface_instance || !record) return;
+    
+    Interface *interface = interface_instance;
+    
+    if (interface->care_record_count >= interface->care_records_capacity) {
+        interface->care_records_capacity += 10; // 每次增加10个容量
+        CareRecord *temp = realloc(interface->care_records, interface->care_records_capacity * sizeof(CareRecord));
+        if (!temp) return; // 内存分配失败
+        interface->care_records = temp;
+    }
+    
+    // 复制养护记录数据
+    memcpy(&interface->care_records[interface->care_record_count], record, sizeof(CareRecord));
+    interface->care_record_count++;
 }
 
 // 提醒数据收集回调函数
 static void reminders_collect_callback(const Reminder* reminder) {
-    // 这个函数将在DAO层被调用，用于收集提醒数据
+    if (!interface_instance || !reminder) return;
+    
+    Interface *interface = interface_instance;
+    
+    if (interface->reminder_count >= interface->reminders_capacity) {
+        interface->reminders_capacity += 10; // 每次增加10个容量
+        Reminder *temp = realloc(interface->reminders, interface->reminders_capacity * sizeof(Reminder));
+        if (!temp) return; // 内存分配失败
+        interface->reminders = temp;
+    }
+    
+    // 复制提醒数据
+    memcpy(&interface->reminders[interface->reminder_count], reminder, sizeof(Reminder));
+    interface->reminder_count++;
 }
 
 #define BACKGROUND_COLOR 0xFFFFFF
@@ -35,8 +76,15 @@ Interface* interface_init() {
         return NULL;
     }
     
+    // 初始化DAO层
+    if (dao_init() != 0) {
+        free(interface);
+        return NULL;
+    }
+    
     interface->lcd = LCD_init();
     if (interface->lcd.fd == -1) {
+        dao_cleanup();
         free(interface);
         return NULL;
     }
@@ -70,6 +118,9 @@ void interface_cleanup(Interface *interface) {
     if (interface->reminders) {
         free(interface->reminders);
     }
+    
+    // 清理DAO层
+    dao_cleanup();
     
     // Linux环境下使用munmap释放内存映射
     #ifdef __linux__
@@ -244,6 +295,35 @@ void interface_handle_touch(Interface *interface, struct point touch_point) {
             }
             break;
             
+        case REMINDERS:
+            if (touch_point.y >= SCREEN_HEIGHT - FOOTER_HEIGHT) {
+                interface_navigate_to(interface, MAIN_MENU);
+                return;
+            }
+            
+            // Check if "Add Reminder" button was pressed
+            Button add_reminder_btn = {SCREEN_WIDTH - BUTTON_WIDTH - 20, HEADER_HEIGHT + 10, BUTTON_WIDTH, BUTTON_HEIGHT, "", 0, 0};
+            if (interface_is_point_in_button(touch_point, add_reminder_btn)) {
+                // TODO: Navigate to Add Reminder screen when implemented
+                return;
+            }
+            
+            // Check if any reminder item was pressed
+            int reminder_start_y = HEADER_HEIGHT + BUTTON_HEIGHT + 30;
+            int reminder_item_height = 70;
+            
+            for (int i = 0; i < interface->reminder_count && i < 5; i++) {
+                int y = reminder_start_y + i * reminder_item_height;
+                Button reminder_item_btn = {20, y, SCREEN_WIDTH - 40, reminder_item_height - 5, "", 0, 0};
+                
+                if (interface_is_point_in_button(touch_point, reminder_item_btn)) {
+                    interface->selected_reminder_id = interface->reminders[i].id;
+                    // TODO: Navigate to Reminder Detail/Edit screen when implemented
+                    return;
+                }
+            }
+            break;
+            
         case PLANT_LIST:
             if (touch_point.y >= SCREEN_HEIGHT - FOOTER_HEIGHT) {
                 interface_navigate_to(interface, MAIN_MENU);
@@ -271,6 +351,32 @@ void interface_handle_touch(Interface *interface, struct point touch_point) {
             }
             break;
             
+        case PLANT_DETAIL:
+            if (touch_point.y >= SCREEN_HEIGHT - FOOTER_HEIGHT) {
+                interface_navigate_to(interface, PLANT_LIST);
+                return;
+            }
+            
+            // 计算"查看养护记录"和"编辑植物"按钮的位置
+            int detail_y = HEADER_HEIGHT + 20;
+            for (int i = 0; i < 6; i++) { // 跳过6行信息显示
+                detail_y += 30;
+            }
+            
+            Button care_button = {30, detail_y + 50, BUTTON_WIDTH, BUTTON_HEIGHT, "", 0, 0};
+            Button edit_button = {30 + BUTTON_WIDTH + 20, detail_y + 50, BUTTON_WIDTH, BUTTON_HEIGHT, "", 0, 0};
+            
+            if (interface_is_point_in_button(touch_point, care_button)) {
+                interface_navigate_to(interface, CARE_RECORDS);
+                return;
+            }
+            
+            if (interface_is_point_in_button(touch_point, edit_button)) {
+                // 编辑植物功能暂未实现
+                return;
+            }
+            break;
+            
         default:
             if (touch_point.y >= SCREEN_HEIGHT - FOOTER_HEIGHT) {
                 interface_navigate_to(interface, MAIN_MENU);
@@ -279,48 +385,202 @@ void interface_handle_touch(Interface *interface, struct point touch_point) {
     }
 }
 
-// 简化版本的数据获取函数
+// 获取植物数据的真实实现
 static int interface_get_plants(Interface *interface) {
-    // 由于DAO层使用回调模式，这里我们简化处理
-    // 在实际项目中，需要实现完整的数据收集逻辑
+    // 重置计数器
     interface->plant_count = 0;
     
-    // 模拟一些测试数据用于界面显示
-    if (interface->plants_capacity < 3) {
-        interface->plants = realloc(interface->plants, 3 * sizeof(Plant));
-        interface->plants_capacity = 3;
+    // 确保有足够的容量
+    if (interface->plants_capacity < 10) {
+        interface->plants_capacity = 10;
+        interface->plants = realloc(interface->plants, interface->plants_capacity * sizeof(Plant));
     }
     
-    // 添加测试数据
-    if (interface->plants_capacity >= 1) {
-        Plant *plant = &interface->plants[0];
-        memset(plant, 0, sizeof(Plant));
-        plant->id = 1;
-        strcpy(plant->name, "玫瑰");
-        strcpy(plant->variety, "红玫瑰");
-        strcpy(plant->planting_date, "2024-01-15");
-        plant->water_frequency = 3;
-        strcpy(plant->last_water_date, "2024-12-18");
-        strcpy(plant->last_fertilize_date, "2024-12-10");
-        strcpy(plant->status, "正常");
-        interface->plant_count++;
-    }
+    // 保存接口实例以便在回调函数中使用
+    interface_instance = interface;
     
-    if (interface->plants_capacity >= 2) {
-        Plant *plant = &interface->plants[1];
-        memset(plant, 0, sizeof(Plant));
-        plant->id = 2;
-        strcpy(plant->name, "兰花");
-        strcpy(plant->variety, "蝴蝶兰");
-        strcpy(plant->planting_date, "2024-03-20");
-        plant->water_frequency = 7;
-        strcpy(plant->last_water_date, "2024-12-17");
-        strcpy(plant->last_fertilize_date, "2024-12-05");
-        strcpy(plant->status, "良好");
-        interface->plant_count++;
+    // 调用DAO层获取所有植物数据
+    DAO_RESULT result = plants_dao_get_all(plants_collect_callback);
+    
+    if (result != DAO_SUCCESS) {
+        printf("获取植物数据失败\n");
+        return -1;
     }
     
     return interface->plant_count;
+}
+
+// 获取特定植物的养护记录
+static int interface_get_care_records(Interface *interface, int plant_id) {
+    // 重置计数器
+    interface->care_record_count = 0;
+    
+    // 确保有足够的容量
+    if (interface->care_records_capacity < 10) {
+        interface->care_records_capacity = 10;
+        interface->care_records = realloc(interface->care_records, interface->care_records_capacity * sizeof(CareRecord));
+    }
+    
+    // 保存接口实例以便在回调函数中使用
+    interface_instance = interface;
+    
+    // 调用DAO层获取指定植物的所有养护记录
+    DAO_RESULT result = care_records_dao_get_by_plant(plant_id, care_records_collect_callback);
+    
+    if (result != DAO_SUCCESS) {
+        printf("获取养护记录失败\n");
+        return -1;
+    }
+    
+    return interface->care_record_count;
+}
+
+// 获取提醒数据
+static int interface_get_reminders(Interface *interface) {
+    // 重置计数器
+    interface->reminder_count = 0;
+    
+    // 确保有足够的容量
+    if (interface->reminders_capacity < 10) {
+        interface->reminders_capacity = 10;
+        interface->reminders = realloc(interface->reminders, interface->reminders_capacity * sizeof(Reminder));
+    }
+    
+    // 保存接口实例以便在回调函数中使用
+    interface_instance = interface;
+    
+    // 调用DAO层获取所有提醒数据
+    DAO_RESULT result = reminders_dao_get_all(reminders_collect_callback);
+    
+    if (result != DAO_SUCCESS) {
+        printf("获取提醒数据失败\n");
+        return -1;
+    }
+    
+    return interface->reminder_count;
+}
+
+void interface_draw_care_records(Interface *interface, int plant_id) {
+    // 获取植物信息用于标题显示
+    Plant plant_info;
+    plant_init(&plant_info);
+    DAO_RESULT result = plants_dao_get_by_id(plant_id, &plant_info);
+    
+    LCD_show_rec(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, BACKGROUND_COLOR, interface->lcd.plcd);
+    
+    char title[100];
+    if (result == DAO_SUCCESS) {
+        snprintf(title, sizeof(title), "%s的养护记录", plant_info.name);
+    } else {
+        snprintf(title, sizeof(title), "养护记录 (ID: %d)", plant_id);
+    }
+    
+    interface_draw_header(interface, title);
+    
+    Button add_button = {SCREEN_WIDTH - BUTTON_WIDTH - 20, HEADER_HEIGHT + 10, BUTTON_WIDTH, BUTTON_HEIGHT, "添加记录", BUTTON_COLOR, TEXT_COLOR};
+    interface_draw_button(interface, &add_button);
+    
+    int start_y = HEADER_HEIGHT + BUTTON_HEIGHT + 30;
+    int item_height = 60;
+    
+    // 获取养护记录数据
+    interface_get_care_records(interface, plant_id);
+    
+    if (interface->care_record_count == 0) {
+        const char *no_records = "暂无养护记录";
+        int text_x = (SCREEN_WIDTH - strlen(no_records) * 8) / 2;
+        int text_y = start_y + 50;
+        
+        showString(interface->lcd.plcd, no_records, 16, TEXT_COLOR, text_x, text_y, BACKGROUND_COLOR);
+    } else {
+        for (int i = 0; i < interface->care_record_count && i < 5; i++) {
+            int y = start_y + i * item_height;
+            
+            char record_info[150];
+            const char* type_str = care_type_to_string(interface->care_records[i].operation_type);
+            snprintf(record_info, sizeof(record_info), "%s - %s", 
+                     interface->care_records[i].operation_date, type_str);
+            
+            LCD_show_rec(20, y, SCREEN_WIDTH - 40, item_height - 5, 0xF5F5F5, interface->lcd.plcd);
+            
+            showString(interface->lcd.plcd, record_info, 16, TEXT_COLOR, 30, y + 10, 0xF5F5F5);
+            
+            // 显示操作详情（截取前一部分）
+            char detail_preview[100];
+            strncpy(detail_preview, interface->care_records[i].details, sizeof(detail_preview) - 1);
+            detail_preview[sizeof(detail_preview) - 1] = '\0';
+            
+            // 如果详情太长，添加省略号
+            if (strlen(interface->care_records[i].details) > sizeof(detail_preview) - 4) {
+                strcpy(detail_preview + sizeof(detail_preview) - 4, "...");
+            }
+            
+            showString(interface->lcd.plcd, detail_preview, 14, 0x666666, 30, y + 35, 0xF5F5F5);
+        }
+    }
+    
+    interface_draw_footer(interface);
+}
+
+void interface_draw_reminders(Interface *interface) {
+    LCD_show_rec(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, BACKGROUND_COLOR, interface->lcd.plcd);
+    interface_draw_header(interface, "提醒管理");
+    
+    Button add_button = {SCREEN_WIDTH - BUTTON_WIDTH - 20, HEADER_HEIGHT + 10, BUTTON_WIDTH, BUTTON_HEIGHT, "添加提醒", BUTTON_COLOR, TEXT_COLOR};
+    interface_draw_button(interface, &add_button);
+    
+    int start_y = HEADER_HEIGHT + BUTTON_HEIGHT + 30;
+    int item_height = 70;
+    
+    // 获取提醒数据
+    interface_get_reminders(interface);
+    
+    if (interface->reminder_count == 0) {
+        const char *no_reminders = "暂无提醒设置";
+        int text_x = (SCREEN_WIDTH - strlen(no_reminders) * 8) / 2;
+        int text_y = start_y + 50;
+        
+        showString(interface->lcd.plcd, no_reminders, 16, TEXT_COLOR, text_x, text_y, BACKGROUND_COLOR);
+    } else {
+        for (int i = 0; i < interface->reminder_count && i < 5; i++) {
+            int y = start_y + i * item_height;
+            
+            // 获取植物名称
+            Plant plant_info;
+            plant_init(&plant_info);
+            DAO_RESULT result = plants_dao_get_by_id(interface->reminders[i].plant_id, &plant_info);
+            
+            char reminder_info[150];
+            char plant_name[51];
+            if (result == DAO_SUCCESS) {
+                strncpy(plant_name, plant_info.name, sizeof(plant_name) - 1);
+                plant_name[sizeof(plant_name) - 1] = '\0';
+            } else {
+                snprintf(plant_name, sizeof(plant_name), "ID:%d", interface->reminders[i].plant_id);
+            }
+            
+            const char* type_str = reminder_type_to_string(interface->reminders[i].reminder_type);
+            snprintf(reminder_info, sizeof(reminder_info), "%s - %s", plant_name, type_str);
+            
+            LCD_show_rec(20, y, SCREEN_WIDTH - 40, item_height - 5, 0xF5F5F5, interface->lcd.plcd);
+            
+            showString(interface->lcd.plcd, reminder_info, 16, TEXT_COLOR, 30, y + 10, 0xF5F5F5);
+            
+            // 显示频率和下次提醒日期
+            char frequency_info[100];
+            if (interface->reminders[i].is_active) {
+                snprintf(frequency_info, sizeof(frequency_info), "频率: %d天  下次: %s", 
+                         interface->reminders[i].frequency, interface->reminders[i].next_reminder_date);
+            } else {
+                snprintf(frequency_info, sizeof(frequency_info), "已停用  频率: %d天", 
+                         interface->reminders[i].frequency);
+            }
+            
+            showString(interface->lcd.plcd, frequency_info, 14, 0x666666, 30, y + 35, 0xF5F5F5);
+        }
+    }
+    
+    interface_draw_footer(interface);
 }
 
 void interface_navigate_to(Interface *interface, ScreenType screen) {
@@ -338,12 +598,10 @@ void interface_navigate_to(Interface *interface, ScreenType screen) {
             interface_draw_plant_detail(interface, interface->selected_plant_id);
             break;
         case CARE_RECORDS:
-            // 简化处理，暂时不实现
-            interface_draw_main_menu(interface);
+            interface_draw_care_records(interface, interface->selected_plant_id);
             break;
         case REMINDERS:
-            // 简化处理，暂时不实现
-            interface_draw_main_menu(interface);
+            interface_draw_reminders(interface);
             break;
         default:
             interface_draw_main_menu(interface);

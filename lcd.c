@@ -5,7 +5,9 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#ifdef __linux__
 #include <sys/mman.h>
+#endif
 #include<stdlib.h>
 
 

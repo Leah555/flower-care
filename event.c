@@ -2,6 +2,8 @@
 #include<stdio.h>
 #include<fcntl.h>
 #include<unistd.h>
+#ifdef __linux__
+#include <linux/input.h>
 
 struct point get_xy()
 {
@@ -45,3 +47,23 @@ struct point get_xy()
     printf("x = %d, y = %d\n", p.x, p.y);
     return p;
 }
+#else
+// Windows平台模拟触摸输入
+struct point get_xy()
+{
+    // 在Windows平台上，我们模拟一个固定的触摸点用于测试
+    struct point p = {-1, -1};
+    
+    // 这里可以添加Windows特定的输入处理代码
+    // 比如使用Windows API处理鼠标点击作为触摸输入
+    // 现在我们简单地返回一个预设值用于测试
+    
+    printf("Simulated touch input on Windows\n");
+    // 模拟点击主菜单的第一个按钮
+    p.x = 100;
+    p.y = 100;
+    
+    printf("x = %d, y = %d\n", p.x, p.y);
+    return p;
+}
+#endif

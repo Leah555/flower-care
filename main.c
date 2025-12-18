@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
+#ifdef __linux__
 #include <sys/mman.h>
+#endif
 #include "event.h"
 #include "lcd.h"
 #include "font_1.h"
