@@ -10,6 +10,14 @@ void care_record_init(CareRecord* record) {
     record->id = -1;
     record->plant_id = -1;
     record->operation_type = CARE_OTHER;
+    record->duration_minutes = 0;
+    record->effectiveness_rating = 0;
+    record->temperature = 0;
+    record->humidity = 0;
+    strcpy(record->operation_category, "常规");
+    strcpy(record->plant_condition_before, "正常");
+    strcpy(record->plant_condition_after, "正常");
+    strcpy(record->weather_condition, "晴");
 }
 
 // 将操作类型枚举转换为字符串
@@ -38,15 +46,21 @@ DAO_RESULT care_records_dao_add(const CareRecord* record) {
     DAO_CHECK_PARAM(record->plant_id > 0);
     
     char *err_msg = NULL;
-    char sql[1024];
+    char sql[2048];
     
     const char* type_str = care_type_to_string(record->operation_type);
     
     snprintf(sql, sizeof(sql),
-        "INSERT INTO care_records (plant_id, operation_type, operation_date, details, amount) "
-        "VALUES (%d, '%s', '%s', '%s', '%s')",
-        record->plant_id, type_str, record->operation_date, 
-        record->details, record->amount);
+        "INSERT INTO care_records (plant_id, operation_category, operation_type, operation_date, "
+        "details, amount, duration_minutes, plant_condition_before, plant_condition_after, "
+        "effectiveness_rating, pest_type, control_method, pesticide_used, temperature, "
+        "humidity, weather_condition, notes) "
+        "VALUES (%d, '%s', '%s', '%s', '%s', '%s', %d, '%s', '%s', %d, '%s', '%s', '%s', %d, %d, '%s', '%s')",
+        record->plant_id, record->operation_category, type_str, record->operation_date, 
+        record->details, record->amount, record->duration_minutes, record->plant_condition_before,
+        record->plant_condition_after, record->effectiveness_rating, record->pest_type,
+        record->control_method, record->pesticide_used, record->temperature, record->humidity,
+        record->weather_condition, record->notes);
     
     int rc = sqlite3_exec(db, sql, NULL, 0, &err_msg);
     if (rc != SQLITE_OK) {
@@ -92,6 +106,8 @@ static int care_records_query_callback(void* data, int argc, char** argv, char**
             record.id = atoi(argv[i]);
         } else if (strcmp(col_names[i], "plant_id") == 0) {
             record.plant_id = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "operation_category") == 0) {
+            dao_strncpy_safe(record.operation_category, argv[i], sizeof(record.operation_category));
         } else if (strcmp(col_names[i], "operation_type") == 0) {
             record.operation_type = string_to_care_type(argv[i]);
         } else if (strcmp(col_names[i], "operation_date") == 0) {
@@ -100,6 +116,28 @@ static int care_records_query_callback(void* data, int argc, char** argv, char**
             dao_strncpy_safe(record.details, argv[i], sizeof(record.details));
         } else if (strcmp(col_names[i], "amount") == 0) {
             dao_strncpy_safe(record.amount, argv[i], sizeof(record.amount));
+        } else if (strcmp(col_names[i], "duration_minutes") == 0) {
+            record.duration_minutes = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "plant_condition_before") == 0) {
+            dao_strncpy_safe(record.plant_condition_before, argv[i], sizeof(record.plant_condition_before));
+        } else if (strcmp(col_names[i], "plant_condition_after") == 0) {
+            dao_strncpy_safe(record.plant_condition_after, argv[i], sizeof(record.plant_condition_after));
+        } else if (strcmp(col_names[i], "effectiveness_rating") == 0) {
+            record.effectiveness_rating = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "pest_type") == 0) {
+            dao_strncpy_safe(record.pest_type, argv[i], sizeof(record.pest_type));
+        } else if (strcmp(col_names[i], "control_method") == 0) {
+            dao_strncpy_safe(record.control_method, argv[i], sizeof(record.control_method));
+        } else if (strcmp(col_names[i], "pesticide_used") == 0) {
+            dao_strncpy_safe(record.pesticide_used, argv[i], sizeof(record.pesticide_used));
+        } else if (strcmp(col_names[i], "temperature") == 0) {
+            record.temperature = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "humidity") == 0) {
+            record.humidity = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "weather_condition") == 0) {
+            dao_strncpy_safe(record.weather_condition, argv[i], sizeof(record.weather_condition));
+        } else if (strcmp(col_names[i], "notes") == 0) {
+            dao_strncpy_safe(record.notes, argv[i], sizeof(record.notes));
         }
     }
     
@@ -128,6 +166,8 @@ static int care_records_get_by_id_callback(void* data, int argc, char** argv, ch
             record->id = atoi(argv[i]);
         } else if (strcmp(col_names[i], "plant_id") == 0) {
             record->plant_id = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "operation_category") == 0) {
+            dao_strncpy_safe(record->operation_category, argv[i], sizeof(record->operation_category));
         } else if (strcmp(col_names[i], "operation_type") == 0) {
             record->operation_type = string_to_care_type(argv[i]);
         } else if (strcmp(col_names[i], "operation_date") == 0) {
@@ -136,6 +176,28 @@ static int care_records_get_by_id_callback(void* data, int argc, char** argv, ch
             dao_strncpy_safe(record->details, argv[i], sizeof(record->details));
         } else if (strcmp(col_names[i], "amount") == 0) {
             dao_strncpy_safe(record->amount, argv[i], sizeof(record->amount));
+        } else if (strcmp(col_names[i], "duration_minutes") == 0) {
+            record->duration_minutes = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "plant_condition_before") == 0) {
+            dao_strncpy_safe(record->plant_condition_before, argv[i], sizeof(record->plant_condition_before));
+        } else if (strcmp(col_names[i], "plant_condition_after") == 0) {
+            dao_strncpy_safe(record->plant_condition_after, argv[i], sizeof(record->plant_condition_after));
+        } else if (strcmp(col_names[i], "effectiveness_rating") == 0) {
+            record->effectiveness_rating = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "pest_type") == 0) {
+            dao_strncpy_safe(record->pest_type, argv[i], sizeof(record->pest_type));
+        } else if (strcmp(col_names[i], "control_method") == 0) {
+            dao_strncpy_safe(record->control_method, argv[i], sizeof(record->control_method));
+        } else if (strcmp(col_names[i], "pesticide_used") == 0) {
+            dao_strncpy_safe(record->pesticide_used, argv[i], sizeof(record->pesticide_used));
+        } else if (strcmp(col_names[i], "temperature") == 0) {
+            record->temperature = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "humidity") == 0) {
+            record->humidity = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "weather_condition") == 0) {
+            dao_strncpy_safe(record->weather_condition, argv[i], sizeof(record->weather_condition));
+        } else if (strcmp(col_names[i], "notes") == 0) {
+            dao_strncpy_safe(record->notes, argv[i], sizeof(record->notes));
         }
     }
     

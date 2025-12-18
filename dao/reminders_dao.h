@@ -14,9 +14,21 @@ typedef struct {
     int id;                     // 提醒ID
     int plant_id;               // 花卉ID
     ReminderType reminder_type; // 提醒类型
-    int frequency;              // 频率（天）
+    
+    // 频率设置
+    int frequency;              // 基础频率（天）
+    int seasonal_adjustment;    // 是否启用季节调整（1启用，0不启用）
+    int spring_frequency;       // 春季频率
+    int summer_frequency;       // 夏季频率
+    int autumn_frequency;       // 秋季频率
+    int winter_frequency;       // 冬季频率
+    
+    // 时间跟踪
     char last_reminder_date[11]; // 最后提醒日期 YYYY-MM-DD
+    char next_reminder_date[11]; // 下次提醒日期 YYYY-MM-DD
+    
     int is_active;              // 是否激活（1激活，0不激活）
+    int priority;               // 优先级（1-5，数字越大优先级越高）
 } Reminder;
 
 // 提醒查询条件结构体

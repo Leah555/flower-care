@@ -15,10 +15,34 @@ typedef enum {
 typedef struct {
     int id;                     // 记录ID
     int plant_id;               // 花卉ID
+    
+    // 操作类型细化
+    char operation_category[21]; // 操作类别
     CareType operation_type;    // 操作类型
+    
     char operation_date[20];    // 操作时间 YYYY-MM-DD HH:MM:SS
+    
+    // 操作详情
     char details[256];          // 操作详情
     char amount[21];            // 用量
+    int duration_minutes;       // 操作时长（分钟）
+    
+    // 效果记录
+    char plant_condition_before[21]; // 操作前植物状态
+    char plant_condition_after[21];  // 操作后植物状态
+    int effectiveness_rating;   // 效果评分（1-5）
+    
+    // 病虫害相关（如果是病虫害操作）
+    char pest_type[31];         // 病虫害类型
+    char control_method[51];    // 防治方法
+    char pesticide_used[51];    // 使用农药
+    
+    // 环境条件
+    int temperature;            // 温度
+    int humidity;               // 湿度
+    char weather_condition[21]; // 天气状况
+    
+    char notes[256];            // 备注
 } CareRecord;
 
 // 养护记录查询条件结构体

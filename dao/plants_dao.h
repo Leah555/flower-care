@@ -9,10 +9,26 @@ typedef struct {
     char name[51];             // 花卉名称
     char variety[51];          // 品种
     char planting_date[11];    // 种植日期 YYYY-MM-DD
+    
+    // 养护参数
     int water_frequency;       // 浇水频率（天）
+    int fertilize_frequency;   // 施肥频率（天）
+    char light_requirement[21]; // 光照需求：强/中/弱
+    int temperature_min;       // 最低适宜温度
+    int temperature_max;       // 最高适宜温度
+    char humidity_requirement[21]; // 湿度要求：高/中/低
+    
+    // 状态跟踪
     char last_water_date[11];  // 最后浇水日期
     char last_fertilize_date[11]; // 最后施肥日期
+    char last_pest_control_date[11]; // 最后病虫害防治日期
     char status[21];           // 生长状态
+    int health_score;          // 健康评分（0-100）
+    
+    // 统计分析字段
+    int total_care_operations; // 总养护操作次数
+    int pest_incidents;        // 病虫害发生次数
+    
     char notes[256];           // 备注信息
 } Plant;
 

@@ -140,12 +140,28 @@ int create_tables() {
         "CREATE TABLE IF NOT EXISTS plants ("
         "id INTEGER PRIMARY KEY AUTOINCREMENT,"
         "name VARCHAR(50) NOT NULL,"
-        "variety VARCHAR(50),"
-        "planting_date DATE,"
+        "variety VARCHAR(50) NOT NULL,"
+        "planting_date DATE NOT NULL,"
+        
+        // 养护参数
         "water_frequency INTEGER,"
+        "fertilize_frequency INTEGER,"
+        "light_requirement VARCHAR(20),"
+        "temperature_min INTEGER,"
+        "temperature_max INTEGER,"
+        "humidity_requirement VARCHAR(20),"
+        
+        // 状态跟踪
         "last_water_date DATE,"
         "last_fertilize_date DATE,"
+        "last_pest_control_date DATE,"
         "status VARCHAR(20) DEFAULT '正常',"
+        "health_score INTEGER DEFAULT 100,"
+        
+        // 统计分析字段
+        "total_care_operations INTEGER DEFAULT 0,"
+        "pest_incidents INTEGER DEFAULT 0,"
+        
         "notes TEXT"
         ");";
     
@@ -154,10 +170,35 @@ int create_tables() {
         "CREATE TABLE IF NOT EXISTS care_records ("
         "id INTEGER PRIMARY KEY AUTOINCREMENT,"
         "plant_id INTEGER NOT NULL,"
-        "operation_type VARCHAR(20) NOT NULL,"
+        
+        // 操作类型细化
+        "operation_category VARCHAR(20) NOT NULL,"
+        "operation_type VARCHAR(30) NOT NULL,"
+        
         "operation_date DATETIME NOT NULL,"
+        
+        // 操作详情
         "details TEXT,"
         "amount VARCHAR(20),"
+        "duration_minutes INTEGER,"
+        
+        // 效果记录
+        "plant_condition_before VARCHAR(20),"
+        "plant_condition_after VARCHAR(20),"
+        "effectiveness_rating INTEGER,"
+        
+        // 病虫害相关（如果是病虫害操作）
+        "pest_type VARCHAR(30),"
+        "control_method VARCHAR(30),"
+        "pesticide_used VARCHAR(50),"
+        
+        // 环境条件
+        "temperature INTEGER,"
+        "humidity INTEGER,"
+        "weather_condition VARCHAR(20),"
+        
+        "notes TEXT,"
+        
         "FOREIGN KEY (plant_id) REFERENCES plants(id)"
         ");";
     
@@ -166,10 +207,22 @@ int create_tables() {
         "CREATE TABLE IF NOT EXISTS reminders ("
         "id INTEGER PRIMARY KEY AUTOINCREMENT,"
         "plant_id INTEGER NOT NULL,"
-        "reminder_type VARCHAR(20) NOT NULL,"
+        
+        "reminder_type VARCHAR(30) NOT NULL,"
+        
         "frequency INTEGER NOT NULL,"
+        "seasonal_adjustment BOOLEAN DEFAULT 0,"
+        "spring_frequency INTEGER,"
+        "summer_frequency INTEGER,"
+        "autumn_frequency INTEGER,"
+        "winter_frequency INTEGER,"
+        
         "last_reminder_date DATE,"
+        "next_reminder_date DATE,"
         "is_active BOOLEAN DEFAULT 1,"
+        
+        "priority INTEGER DEFAULT 1,"
+        
         "FOREIGN KEY (plant_id) REFERENCES plants(id)"
         ");";
     
@@ -191,6 +244,76 @@ int create_tables() {
     rc = sqlite3_exec(db, create_reminders_table, 0, 0, &err_msg);
     if (rc != SQLITE_OK) {
         fprintf(stderr, "创建reminders表失败: %s\n", err_msg);
+        sqlite3_free(err_msg);
+        return -1;
+    }
+    
+    // 创建生长记录表
+    const char *create_growth_records_table = 
+        "CREATE TABLE IF NOT EXISTS growth_records ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "plant_id INTEGER NOT NULL,"
+        "record_date DATE NOT NULL,"
+        
+        // 生长指标
+        "height_cm DECIMAL(5,2),"
+        "leaf_count INTEGER,"
+        "bud_count INTEGER,"
+        "flower_count INTEGER,"
+        
+        // 健康状况
+        "health_score INTEGER,"
+        "leaf_color VARCHAR(20),"
+        "growth_vigor VARCHAR(20),"
+        
+        // 环境因素
+        "temperature INTEGER,"
+        "humidity INTEGER,"
+        "light_exposure VARCHAR(20),"
+        
+        "notes TEXT,"
+        "photo_path VARCHAR(200),"
+        
+        "FOREIGN KEY (plant_id) REFERENCES plants(id)"
+        ");";
+    
+    rc = sqlite3_exec(db, create_growth_records_table, 0, 0, &err_msg);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "创建growth_records表失败: %s\n", err_msg);
+        sqlite3_free(err_msg);
+        return -1;
+    }
+    
+    // 创建养护经验表
+    const char *create_care_experience_table = 
+        "CREATE TABLE IF NOT EXISTS care_experience ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "variety VARCHAR(50) NOT NULL,"
+        
+        // 成功经验
+        "optimal_water_frequency INTEGER,"
+        "optimal_fertilize_frequency INTEGER,"
+        "best_season VARCHAR(20),"
+        "common_pests TEXT,"
+        "effective_controls TEXT,"
+        
+        // 失败教训
+        "common_mistakes TEXT,"
+        "warning_signs TEXT,"
+        "recovery_methods TEXT,"
+        
+        // 统计分析
+        "total_plants INTEGER DEFAULT 0,"
+        "success_rate DECIMAL(5,2),"
+        "avg_health_score DECIMAL(5,2),"
+        
+        "last_updated DATE,"
+        "confidence_level INTEGER DEFAULT 1"
+        ");";
+    
+    rc = sqlite3_exec(db, create_care_experience_table, 0, 0, &err_msg);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "创建care_experience表失败: %s\n", err_msg);
         sqlite3_free(err_msg);
         return -1;
     }
@@ -249,7 +372,7 @@ int table_exists(const char* table_name) {
 
 // 检查所有必需的表是否存在
 int check_tables_exist() {
-    const char* required_tables[] = {"plants", "care_records", "reminders"};
+    const char* required_tables[] = {"plants", "care_records", "reminders", "growth_records", "care_experience"};
     int table_count = sizeof(required_tables) / sizeof(required_tables[0]);
     
     for (int i = 0; i < table_count; i++) {

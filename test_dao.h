@@ -8,6 +8,8 @@
 #include "dao/plants_dao.h"
 #include "dao/care_records_dao.h"
 #include "dao/reminders_dao.h"
+#include "dao/growth_records_dao.h"
+#include "dao/care_experience_dao.h"
 
 // 测试结果宏
 #define TEST_PASSED 0
@@ -41,6 +43,8 @@
 int test_plants_dao();
 int test_care_records_dao();
 int test_reminders_dao();
+int test_growth_records_dao();
+int test_care_experience_dao();
 
 // 辅助函数
 void get_current_date(char* date_str);

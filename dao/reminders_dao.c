@@ -12,7 +12,13 @@ void reminder_init(Reminder* reminder) {
     reminder->plant_id = -1;
     reminder->reminder_type = REMINDER_WATER;
     reminder->frequency = 7; // 默认7天
+    reminder->seasonal_adjustment = 0; // 默认不启用季节调整
+    reminder->spring_frequency = 7;
+    reminder->summer_frequency = 5; // 夏季频率更高
+    reminder->autumn_frequency = 7;
+    reminder->winter_frequency = 10; // 冬季频率更低
     reminder->is_active = 1; // 默认激活
+    reminder->priority = 1; // 默认优先级1
 }
 
 // 将提醒类型枚举转换为字符串
@@ -38,15 +44,19 @@ DAO_RESULT reminders_dao_add(const Reminder* reminder) {
     DAO_CHECK_PARAM(reminder->frequency > 0);
     
     char *err_msg = NULL;
-    char sql[1024];
+    char sql[2048];
     
     const char* type_str = reminder_type_to_string(reminder->reminder_type);
     
     snprintf(sql, sizeof(sql),
-        "INSERT INTO reminders (plant_id, reminder_type, frequency, last_reminder_date, is_active) "
-        "VALUES (%d, '%s', %d, '%s', %d)",
-        reminder->plant_id, type_str, reminder->frequency, 
-        reminder->last_reminder_date, reminder->is_active);
+        "INSERT INTO reminders (plant_id, reminder_type, frequency, seasonal_adjustment, "
+        "spring_frequency, summer_frequency, autumn_frequency, winter_frequency, "
+        "last_reminder_date, next_reminder_date, is_active, priority) "
+        "VALUES (%d, '%s', %d, %d, %d, %d, %d, %d, '%s', '%s', %d, %d)",
+        reminder->plant_id, type_str, reminder->frequency, reminder->seasonal_adjustment,
+        reminder->spring_frequency, reminder->summer_frequency, reminder->autumn_frequency,
+        reminder->winter_frequency, reminder->last_reminder_date, reminder->next_reminder_date,
+        reminder->is_active, reminder->priority);
     
     int rc = sqlite3_exec(db, sql, NULL, 0, &err_msg);
     if (rc != SQLITE_OK) {
@@ -64,15 +74,19 @@ DAO_RESULT reminders_dao_update(int reminder_id, const Reminder* reminder) {
     DAO_CHECK_PARAM(reminder->frequency > 0);
     
     char *err_msg = NULL;
-    char sql[1024];
+    char sql[2048];
     
     const char* type_str = reminder_type_to_string(reminder->reminder_type);
     
     snprintf(sql, sizeof(sql),
         "UPDATE reminders SET plant_id=%d, reminder_type='%s', frequency=%d, "
-        "last_reminder_date='%s', is_active=%d WHERE id=%d",
-        reminder->plant_id, type_str, reminder->frequency, 
-        reminder->last_reminder_date, reminder->is_active, reminder_id);
+        "seasonal_adjustment=%d, spring_frequency=%d, summer_frequency=%d, "
+        "autumn_frequency=%d, winter_frequency=%d, last_reminder_date='%s', "
+        "next_reminder_date='%s', is_active=%d, priority=%d WHERE id=%d",
+        reminder->plant_id, type_str, reminder->frequency, reminder->seasonal_adjustment,
+        reminder->spring_frequency, reminder->summer_frequency, reminder->autumn_frequency,
+        reminder->winter_frequency, reminder->last_reminder_date, reminder->next_reminder_date,
+        reminder->is_active, reminder->priority, reminder_id);
     
     int rc = sqlite3_exec(db, sql, NULL, 0, &err_msg);
     if (rc != SQLITE_OK) {
@@ -127,10 +141,24 @@ static int reminders_query_callback(void* data, int argc, char** argv, char** co
             reminder.reminder_type = string_to_reminder_type(argv[i]);
         } else if (strcmp(col_names[i], "frequency") == 0) {
             reminder.frequency = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "seasonal_adjustment") == 0) {
+            reminder.seasonal_adjustment = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "spring_frequency") == 0) {
+            reminder.spring_frequency = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "summer_frequency") == 0) {
+            reminder.summer_frequency = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "autumn_frequency") == 0) {
+            reminder.autumn_frequency = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "winter_frequency") == 0) {
+            reminder.winter_frequency = atoi(argv[i]);
         } else if (strcmp(col_names[i], "last_reminder_date") == 0) {
             dao_strncpy_safe(reminder.last_reminder_date, argv[i], sizeof(reminder.last_reminder_date));
+        } else if (strcmp(col_names[i], "next_reminder_date") == 0) {
+            dao_strncpy_safe(reminder.next_reminder_date, argv[i], sizeof(reminder.next_reminder_date));
         } else if (strcmp(col_names[i], "is_active") == 0) {
             reminder.is_active = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "priority") == 0) {
+            reminder.priority = atoi(argv[i]);
         }
     }
     
@@ -163,10 +191,24 @@ static int reminders_get_by_id_callback(void* data, int argc, char** argv, char*
             reminder->reminder_type = string_to_reminder_type(argv[i]);
         } else if (strcmp(col_names[i], "frequency") == 0) {
             reminder->frequency = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "seasonal_adjustment") == 0) {
+            reminder->seasonal_adjustment = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "spring_frequency") == 0) {
+            reminder->spring_frequency = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "summer_frequency") == 0) {
+            reminder->summer_frequency = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "autumn_frequency") == 0) {
+            reminder->autumn_frequency = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "winter_frequency") == 0) {
+            reminder->winter_frequency = atoi(argv[i]);
         } else if (strcmp(col_names[i], "last_reminder_date") == 0) {
             dao_strncpy_safe(reminder->last_reminder_date, argv[i], sizeof(reminder->last_reminder_date));
+        } else if (strcmp(col_names[i], "next_reminder_date") == 0) {
+            dao_strncpy_safe(reminder->next_reminder_date, argv[i], sizeof(reminder->next_reminder_date));
         } else if (strcmp(col_names[i], "is_active") == 0) {
             reminder->is_active = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "priority") == 0) {
+            reminder->priority = atoi(argv[i]);
         }
     }
     

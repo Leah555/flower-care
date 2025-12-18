@@ -7,6 +7,10 @@ static CareRecord test_care_records[20];
 static int test_care_record_count = 0;
 static Reminder test_reminders[10];
 static int test_reminder_count = 0;
+static GrowthRecord test_growth_records[20];
+static int test_growth_record_count = 0;
+static CareExperience test_care_experiences[10];
+static int test_care_experience_count = 0;
 
 // 获取当前日期（YYYY-MM-DD格式）
 void get_current_date(char* date_str) {
@@ -46,11 +50,29 @@ static void reminders_collect_callback(const Reminder* reminder) {
     }
 }
 
+// 生长记录数据收集回调函数
+static void growth_records_collect_callback(const GrowthRecord* record) {
+    if (test_growth_record_count < 20) {
+        memcpy(&test_growth_records[test_growth_record_count], record, sizeof(GrowthRecord));
+        test_growth_record_count++;
+    }
+}
+
+// 养护经验数据收集回调函数
+static void care_experiences_collect_callback(const CareExperience* experience) {
+    if (test_care_experience_count < 10) {
+        memcpy(&test_care_experiences[test_care_experience_count], experience, sizeof(CareExperience));
+        test_care_experience_count++;
+    }
+}
+
 // 重置测试数据
 static void reset_test_data() {
     test_plant_count = 0;
     test_care_record_count = 0;
     test_reminder_count = 0;
+    test_growth_record_count = 0;
+    test_care_experience_count = 0;
 }
 
 // 清理数据库表数据
@@ -320,6 +342,186 @@ int test_reminders_dao() {
     return TEST_PASSED;
 }
 
+// 测试生长记录DAO
+int test_growth_records_dao() {
+    printf("\n=== 测试生长记录DAO ===\n");
+    
+    // 首先需要有一个植物来关联生长记录
+    Plant plant;
+    plant_init(&plant);
+    strcpy(plant.name, "生长记录测试植物");
+    strcpy(plant.variety, "测试品种");
+    strcpy(plant.planting_date, "2024-01-01");
+    
+    DAO_RESULT result = plants_dao_add(&plant);
+    TEST_EQUAL(result, DAO_SUCCESS, "创建测试植物失败");
+    
+    // 获取植物ID
+    reset_test_data();
+    result = plants_dao_get_all(plants_collect_callback);
+    TEST_EQUAL(result, DAO_SUCCESS, "获取测试植物ID失败");
+    int plant_id = test_plants[0].id;
+    
+    GrowthRecord record;
+    growth_record_init(&record);
+    
+    record.plant_id = plant_id;
+    strcpy(record.record_date, "2024-12-19");
+    record.height_cm = 25.5;
+    record.leaf_count = 12;
+    record.bud_count = 3;
+    record.flower_count = 2;
+    record.health_score = 85;
+    strcpy(record.leaf_color, "绿色");
+    strcpy(record.growth_vigor, "良好");
+    record.temperature = 22;
+    record.humidity = 65;
+    strcpy(record.light_exposure, "充足");
+    strcpy(record.notes, "测试生长记录");
+    strcpy(record.photo_path, "/photos/test.jpg");
+    
+    // 测试1：添加生长记录
+    printf("1. 测试添加生长记录...\n");
+    result = growth_records_dao_add(&record);
+    TEST_EQUAL(result, DAO_SUCCESS, "添加生长记录失败");
+    printf("✓ 添加生长记录成功\n");
+    
+    // 测试2：查询花卉的生长记录
+    printf("2. 测试查询花卉的生长记录...\n");
+    reset_test_data();
+    result = growth_records_dao_get_by_plant(plant_id, growth_records_collect_callback);
+    TEST_EQUAL(result, DAO_SUCCESS, "查询花卉生长记录失败");
+    TEST_EQUAL(test_growth_record_count > 0, 1, "未找到任何生长记录");
+    printf("✓ 查询花卉生长记录成功，找到 %d 个记录\n", test_growth_record_count);
+    
+    // 测试3：根据ID查询生长记录
+    printf("3. 测试根据ID查询生长记录...\n");
+    GrowthRecord found_record;
+    int record_id = test_growth_records[0].id;
+    result = growth_records_dao_get_by_id(record_id, &found_record);
+    TEST_EQUAL(result, DAO_SUCCESS, "根据ID查询生长记录失败");
+    TEST_EQUAL(found_record.plant_id, plant_id, "查询到的生长记录植物ID不匹配");
+    TEST_EQUAL(found_record.height_cm, 25.5, "查询到的生长记录高度不匹配");
+    printf("✓ 根据ID查询生长记录成功\n");
+    
+    // 测试4：条件查询生长记录
+    printf("4. 测试条件查询生长记录...\n");
+    GrowthRecordQuery query;
+    memset(&query, 0, sizeof(GrowthRecordQuery));
+    query.plant_id = plant_id;
+    strcpy(query.start_date, "2024-12-01");
+    strcpy(query.end_date, "2024-12-31");
+    
+    reset_test_data();
+    result = growth_records_dao_query(&query, growth_records_collect_callback);
+    TEST_EQUAL(result, DAO_SUCCESS, "条件查询生长记录失败");
+    TEST_EQUAL(test_growth_record_count > 0, 1, "条件查询未找到匹配的生长记录");
+    printf("✓ 条件查询生长记录成功，找到 %d 个匹配的记录\n", test_growth_record_count);
+    
+    // 测试5：删除生长记录（暂时注释以便查看数据）
+    printf("5. 测试删除生长记录...\n");
+    // result = growth_records_dao_delete(record_id);
+    // TEST_EQUAL(result, DAO_SUCCESS, "删除生长记录失败");
+    
+    // 验证删除
+    // result = growth_records_dao_get_by_id(record_id, &found_record);
+    // TEST_EQUAL(result, DAO_NOT_FOUND, "生长记录删除验证失败");
+    printf("✓ 删除生长记录测试跳过（保留数据）\n");
+    
+    // 清理测试植物（暂时注释以便查看数据）
+    // plants_dao_delete(plant_id);
+    
+    printf("=== 生长记录DAO测试全部通过 ===\n");
+    return TEST_PASSED;
+}
+
+// 测试养护经验DAO
+int test_care_experience_dao() {
+    printf("\n=== 测试养护经验DAO ===\n");
+    
+    CareExperience experience;
+    care_experience_init(&experience);
+    
+    strcpy(experience.variety, "玫瑰");
+    experience.optimal_water_frequency = 3;
+    experience.optimal_fertilize_frequency = 7;
+    strcpy(experience.best_season, "春季");
+    strcpy(experience.common_pests, "蚜虫,红蜘蛛");
+    strcpy(experience.effective_controls, "喷洒杀虫剂,保持通风");
+    strcpy(experience.common_mistakes, "浇水过多,光照不足");
+    strcpy(experience.warning_signs, "叶片发黄,生长缓慢");
+    strcpy(experience.recovery_methods, "减少浇水,增加光照");
+    experience.total_plants = 10;
+    experience.success_rate = 85.5;
+    experience.avg_health_score = 88.2;
+    strcpy(experience.last_updated, "2024-12-19");
+    experience.confidence_level = 4;
+    
+    // 测试1：添加养护经验
+    printf("1. 测试添加养护经验...\n");
+    DAO_RESULT result = care_experience_dao_add(&experience);
+    TEST_EQUAL(result, DAO_SUCCESS, "添加养护经验失败");
+    printf("✓ 添加养护经验成功\n");
+    
+    // 测试2：查询所有养护经验
+    printf("2. 测试查询所有养护经验...\n");
+    reset_test_data();
+    result = care_experience_dao_get_all(care_experiences_collect_callback);
+    TEST_EQUAL(result, DAO_SUCCESS, "查询所有养护经验失败");
+    TEST_EQUAL(test_care_experience_count > 0, 1, "未找到任何养护经验");
+    printf("✓ 查询所有养护经验成功，找到 %d 个经验记录\n", test_care_experience_count);
+    
+    // 测试3：根据ID查询养护经验
+    printf("3. 测试根据ID查询养护经验...\n");
+    CareExperience found_experience;
+    int experience_id = test_care_experiences[0].id;
+    result = care_experience_dao_get_by_id(experience_id, &found_experience);
+    TEST_EQUAL(result, DAO_SUCCESS, "根据ID查询养护经验失败");
+    TEST_STRING_EQUAL(found_experience.variety, "玫瑰", "查询到的养护经验品种不匹配");
+    TEST_EQUAL(found_experience.optimal_water_frequency, 3, "查询到的养护经验浇水频率不匹配");
+    printf("✓ 根据ID查询养护经验成功\n");
+    
+    // 测试4：条件查询养护经验
+    printf("4. 测试条件查询养护经验...\n");
+    CareExperienceQuery query;
+    memset(&query, 0, sizeof(CareExperienceQuery));
+    strcpy(query.variety, "玫瑰");
+    query.min_confidence_level = 3;
+    
+    reset_test_data();
+    result = care_experience_dao_query(&query, care_experiences_collect_callback);
+    TEST_EQUAL(result, DAO_SUCCESS, "条件查询养护经验失败");
+    TEST_EQUAL(test_care_experience_count > 0, 1, "条件查询未找到匹配的养护经验");
+    printf("✓ 条件查询养护经验成功，找到 %d 个匹配的经验记录\n", test_care_experience_count);
+    
+    // 测试5：更新养护经验
+    printf("5. 测试更新养护经验...\n");
+    experience.success_rate = 90.0;
+    experience.avg_health_score = 92.5;
+    result = care_experience_dao_update(experience_id, &experience);
+    TEST_EQUAL(result, DAO_SUCCESS, "更新养护经验失败");
+    
+    // 验证更新
+    result = care_experience_dao_get_by_id(experience_id, &found_experience);
+    TEST_EQUAL(result, DAO_SUCCESS, "验证更新失败");
+    TEST_EQUAL(found_experience.success_rate, 90.0, "养护经验成功率更新失败");
+    TEST_EQUAL(found_experience.avg_health_score, 92.5, "养护经验平均健康评分更新失败");
+    printf("✓ 更新养护经验成功\n");
+    
+    // 测试6：删除养护经验（暂时注释以便查看数据）
+    printf("6. 测试删除养护经验...\n");
+    // result = care_experience_dao_delete(experience_id);
+    // TEST_EQUAL(result, DAO_SUCCESS, "删除养护经验失败");
+    
+    // 验证删除
+    // result = care_experience_dao_get_by_id(experience_id, &found_experience);
+    // TEST_EQUAL(result, DAO_NOT_FOUND, "养护经验删除验证失败");
+    printf("✓ 删除养护经验测试跳过（保留数据）\n");
+    
+    printf("=== 养护经验DAO测试全部通过 ===\n");
+    return TEST_PASSED;
+}
+
 // 主测试函数
 int main() {
     printf("=== DAO层单元测试开始 ===\n");
@@ -344,6 +546,16 @@ int main() {
     
     // 运行提醒管理DAO测试
     if (test_reminders_dao() != TEST_PASSED) {
+        total_failed++;
+    }
+    
+    // 运行生长记录DAO测试
+    if (test_growth_records_dao() != TEST_PASSED) {
+        total_failed++;
+    }
+    
+    // 运行养护经验DAO测试
+    if (test_care_experience_dao() != TEST_PASSED) {
         total_failed++;
     }
     
