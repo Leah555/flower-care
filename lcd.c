@@ -5,7 +5,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__) || defined(__DARWIN__)
 #include <sys/mman.h>
 #endif
 #include<stdlib.h>

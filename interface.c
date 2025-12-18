@@ -3,10 +3,20 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <time.h>
 #include "font_1.h"
+#include "dao/growth_records_dao.h"
+#include "dao/care_experience_dao.h"
 
 // 全局接口实例指针定义
 Interface* interface_instance = NULL;
+
+static int interface_get_plants(Interface *interface);
+static int interface_get_care_records(Interface *interface, int plant_id);
+static int interface_get_growth_records(Interface *interface, int plant_id);
+static int interface_get_reminders(Interface *interface);
+static int interface_get_care_experiences(Interface *interface);
+static CareExperience* interface_find_experience_by_variety(Interface *interface, const char *variety);
 
 // 植物数据收集回调函数
 static void plants_collect_callback(const Plant* plant) {
@@ -62,6 +72,42 @@ static void reminders_collect_callback(const Reminder* reminder) {
     interface->reminder_count++;
 }
 
+// 生长记录数据收集回调函数
+static void growth_records_collect_callback(const GrowthRecord* record) {
+    if (!interface_instance || !record) return;
+    
+    Interface *interface = interface_instance;
+    
+    if (interface->growth_record_count >= interface->growth_records_capacity) {
+        interface->growth_records_capacity += 10; // 每次增加10个容量
+        GrowthRecord *temp = realloc(interface->growth_records, interface->growth_records_capacity * sizeof(GrowthRecord));
+        if (!temp) return; // 内存分配失败
+        interface->growth_records = temp;
+    }
+    
+    // 复制生长记录数据
+    memcpy(&interface->growth_records[interface->growth_record_count], record, sizeof(GrowthRecord));
+    interface->growth_record_count++;
+}
+
+// 养护经验数据收集回调函数
+static void care_experiences_collect_callback(const CareExperience* experience) {
+    if (!interface_instance || !experience) return;
+    
+    Interface *interface = interface_instance;
+    
+    if (interface->care_experience_count >= interface->care_experiences_capacity) {
+        interface->care_experiences_capacity += 10; // 每次增加10个容量
+        CareExperience *temp = realloc(interface->care_experiences, interface->care_experiences_capacity * sizeof(CareExperience));
+        if (!temp) return; // 内存分配失败
+        interface->care_experiences = temp;
+    }
+    
+    // 复制养护经验数据
+    memcpy(&interface->care_experiences[interface->care_experience_count], experience, sizeof(CareExperience));
+    interface->care_experience_count++;
+}
+
 #define BACKGROUND_COLOR 0xFFFFFF
 #define HEADER_COLOR 0x4CAF50
 #define FOOTER_COLOR 0x2196F3
@@ -99,9 +145,17 @@ Interface* interface_init() {
     interface->reminders = NULL;
     interface->reminder_count = 0;
     interface->reminders_capacity = 0;
+    interface->growth_records = NULL;
+    interface->growth_record_count = 0;
+    interface->growth_records_capacity = 0;
+    interface->care_experiences = NULL;
+    interface->care_experience_count = 0;
+    interface->care_experiences_capacity = 0;
     interface->selected_plant_id = -1;
     interface->selected_care_record_id = -1;
+    interface->selected_growth_record_id = -1;
     interface->selected_reminder_id = -1;
+    interface->selected_experience_id = -1;
     
     return interface;
 }
@@ -117,6 +171,12 @@ void interface_cleanup(Interface *interface) {
     }
     if (interface->reminders) {
         free(interface->reminders);
+    }
+    if (interface->growth_records) {
+        free(interface->growth_records);
+    }
+    if (interface->care_experiences) {
+        free(interface->care_experiences);
     }
     
     // 清理DAO层
@@ -175,14 +235,21 @@ void interface_draw_main_menu(Interface *interface) {
     LCD_show_rec(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, BACKGROUND_COLOR, interface->lcd.plcd);
     interface_draw_header(interface, "花卉养护记录系统");
     
+    // 使用更小的按钮以适应更多选项
+    int small_button_height = 50;
+    int small_button_width = 180;
+    int small_margin = 15;
+    
     Button buttons[] = {
-        {(SCREEN_WIDTH - BUTTON_WIDTH) / 2, HEADER_HEIGHT + BUTTON_MARGIN, BUTTON_WIDTH, BUTTON_HEIGHT, "植物管理", BUTTON_COLOR, TEXT_COLOR},
-        {(SCREEN_WIDTH - BUTTON_WIDTH) / 2, HEADER_HEIGHT + BUTTON_MARGIN * 2 + BUTTON_HEIGHT, BUTTON_WIDTH, BUTTON_HEIGHT, "养护记录", BUTTON_COLOR, TEXT_COLOR},
-        {(SCREEN_WIDTH - BUTTON_WIDTH) / 2, HEADER_HEIGHT + BUTTON_MARGIN * 3 + BUTTON_HEIGHT * 2, BUTTON_WIDTH, BUTTON_HEIGHT, "提醒管理", BUTTON_COLOR, TEXT_COLOR},
-        {(SCREEN_WIDTH - BUTTON_WIDTH) / 2, HEADER_HEIGHT + BUTTON_MARGIN * 4 + BUTTON_HEIGHT * 3, BUTTON_WIDTH, BUTTON_HEIGHT, "系统设置", BUTTON_COLOR, TEXT_COLOR}
+        {(SCREEN_WIDTH - small_button_width) / 2, HEADER_HEIGHT + small_margin, small_button_width, small_button_height, "植物管理", BUTTON_COLOR, TEXT_COLOR},
+        {(SCREEN_WIDTH - small_button_width) / 2, HEADER_HEIGHT + small_margin * 2 + small_button_height, small_button_width, small_button_height, "养护记录", BUTTON_COLOR, TEXT_COLOR},
+        {(SCREEN_WIDTH - small_button_width) / 2, HEADER_HEIGHT + small_margin * 3 + small_button_height * 2, small_button_width, small_button_height, "生长记录", BUTTON_COLOR, TEXT_COLOR},
+        {(SCREEN_WIDTH - small_button_width) / 2, HEADER_HEIGHT + small_margin * 4 + small_button_height * 3, small_button_width, small_button_height, "提醒管理", BUTTON_COLOR, TEXT_COLOR},
+        {(SCREEN_WIDTH - small_button_width) / 2, HEADER_HEIGHT + small_margin * 5 + small_button_height * 4, small_button_width, small_button_height, "养护经验", BUTTON_COLOR, TEXT_COLOR},
+        {(SCREEN_WIDTH - small_button_width) / 2, HEADER_HEIGHT + small_margin * 6 + small_button_height * 5, small_button_width, small_button_height, "系统设置", BUTTON_COLOR, TEXT_COLOR}
     };
     
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 6; i++) {
         interface_draw_button(interface, &buttons[i]);
     }
     
@@ -261,10 +328,27 @@ void interface_draw_plant_detail(Interface *interface, int plant_id) {
     snprintf(info, sizeof(info), "状态: %s", plant->status);
     showString(interface->lcd.plcd, info, 16, TEXT_COLOR, 30, y, BACKGROUND_COLOR);
     
-    Button care_button = {30, y + 50, BUTTON_WIDTH, BUTTON_HEIGHT, "查看养护记录", BUTTON_COLOR, TEXT_COLOR};
+    // 显示养护经验（如果存在）
+    CareExperience* experience = interface_find_experience_by_variety(interface, plant->variety);
+    if (experience) {
+        y += 30;
+        showString(interface->lcd.plcd, "--- 养护经验 ---", 14, HIGHLIGHT_COLOR, 30, y, BACKGROUND_COLOR);
+        y += 25;
+        char exp_info[150];
+        snprintf(exp_info, sizeof(exp_info), "最佳浇水: %d天 | 成功率: %.1f%%", 
+                 experience->optimal_water_frequency, experience->success_rate);
+        showString(interface->lcd.plcd, exp_info, 14, TEXT_COLOR, 30, y, BACKGROUND_COLOR);
+    }
+    
+    y += 40;
+    Button care_button = {30, y, BUTTON_WIDTH, BUTTON_HEIGHT, "养护记录", BUTTON_COLOR, TEXT_COLOR};
     interface_draw_button(interface, &care_button);
     
-    Button edit_button = {30 + BUTTON_WIDTH + 20, y + 50, BUTTON_WIDTH, BUTTON_HEIGHT, "编辑植物", BUTTON_COLOR, TEXT_COLOR};
+    Button growth_button = {30 + BUTTON_WIDTH + 20, y, BUTTON_WIDTH, BUTTON_HEIGHT, "生长记录", BUTTON_COLOR, TEXT_COLOR};
+    interface_draw_button(interface, &growth_button);
+    
+    y += BUTTON_HEIGHT + 10;
+    Button edit_button = {30, y, BUTTON_WIDTH, BUTTON_HEIGHT, "编辑植物", BUTTON_COLOR, TEXT_COLOR};
     interface_draw_button(interface, &edit_button);
     
     interface_draw_footer(interface);
@@ -279,16 +363,40 @@ void interface_handle_touch(Interface *interface, struct point touch_point) {
                 return;
             }
             
-            int button_y_start = HEADER_HEIGHT + BUTTON_MARGIN;
-            for (int i = 0; i < 4; i++) {
-                Button test_button = {(SCREEN_WIDTH - BUTTON_WIDTH) / 2, button_y_start + i * (BUTTON_HEIGHT + BUTTON_MARGIN), BUTTON_WIDTH, BUTTON_HEIGHT, "", 0, 0};
+            int small_button_height = 50;
+            int small_button_width = 180;
+            int small_margin = 15;
+            int button_y_start = HEADER_HEIGHT + small_margin;
+            
+            for (int i = 0; i < 6; i++) {
+                Button test_button = {(SCREEN_WIDTH - small_button_width) / 2, button_y_start + i * (small_button_height + small_margin), small_button_width, small_button_height, "", 0, 0};
                 
                 if (interface_is_point_in_button(touch_point, test_button)) {
                     switch (i) {
                         case 0: interface_navigate_to(interface, PLANT_LIST); break;
-                        case 1: interface_navigate_to(interface, CARE_RECORDS); break;
-                        case 2: interface_navigate_to(interface, REMINDERS); break;
-                        case 3: interface_navigate_to(interface, SETTINGS); break;
+                        case 1: 
+                            // 养护记录需要先选择植物
+                            if (interface->plant_count == 0) {
+                                interface_get_plants(interface);
+                            }
+                            if (interface->plant_count > 0) {
+                                interface->selected_plant_id = interface->plants[0].id;
+                                interface_navigate_to(interface, CARE_RECORDS);
+                            }
+                            break;
+                        case 2:
+                            // 生长记录需要先选择植物
+                            if (interface->plant_count == 0) {
+                                interface_get_plants(interface);
+                            }
+                            if (interface->plant_count > 0) {
+                                interface->selected_plant_id = interface->plants[0].id;
+                                interface_navigate_to(interface, GROWTH_RECORDS);
+                            }
+                            break;
+                        case 3: interface_navigate_to(interface, REMINDERS); break;
+                        case 4: interface_navigate_to(interface, CARE_EXPERIENCE); break;
+                        case 5: interface_navigate_to(interface, SETTINGS); break;
                     }
                     return;
                 }
@@ -301,10 +409,40 @@ void interface_handle_touch(Interface *interface, struct point touch_point) {
                 return;
             }
             
-            // Check if "Add Reminder" button was pressed
             Button add_reminder_btn = {SCREEN_WIDTH - BUTTON_WIDTH - 20, HEADER_HEIGHT + 10, BUTTON_WIDTH, BUTTON_HEIGHT, "", 0, 0};
             if (interface_is_point_in_button(touch_point, add_reminder_btn)) {
-                // TODO: Navigate to Add Reminder screen when implemented
+                int plant_id = -1;
+                if (interface->selected_plant_id > 0) {
+                    plant_id = interface->selected_plant_id;
+                } else {
+                    if (interface->plant_count == 0) {
+                        interface_get_plants(interface);
+                    }
+                    if (interface->plant_count > 0) {
+                        plant_id = interface->plants[0].id;
+                    } else {
+                        return;
+                    }
+                }
+
+                Reminder reminder;
+                reminder_init(&reminder);
+                reminder.plant_id = plant_id;
+                reminder.reminder_type = REMINDER_WATER;
+                reminder.frequency = 3;
+                reminder.is_active = 1;
+                time_t t = time(NULL);
+                struct tm *tm_info = localtime(&t);
+                char date_str[11];
+                strftime(date_str, 11, "%Y-%m-%d", tm_info);
+                strncpy(reminder.last_reminder_date, date_str, sizeof(reminder.last_reminder_date) - 1);
+                reminder.last_reminder_date[sizeof(reminder.last_reminder_date) - 1] = '\0';
+
+                DAO_RESULT r = reminders_dao_add(&reminder);
+                if (r == DAO_SUCCESS) {
+                    interface_get_reminders(interface);
+                    interface_draw_reminders(interface);
+                }
                 return;
             }
             
@@ -317,8 +455,13 @@ void interface_handle_touch(Interface *interface, struct point touch_point) {
                 Button reminder_item_btn = {20, y, SCREEN_WIDTH - 40, reminder_item_height - 5, "", 0, 0};
                 
                 if (interface_is_point_in_button(touch_point, reminder_item_btn)) {
-                    interface->selected_reminder_id = interface->reminders[i].id;
-                    // TODO: Navigate to Reminder Detail/Edit screen when implemented
+                    int rid = interface->reminders[i].id;
+                    int current_active = interface->reminders[i].is_active;
+                    DAO_RESULT r = reminders_dao_set_active(rid, current_active ? 0 : 1);
+                    if (r == DAO_SUCCESS) {
+                        interface_get_reminders(interface);
+                        interface_draw_reminders(interface);
+                    }
                     return;
                 }
             }
@@ -332,7 +475,28 @@ void interface_handle_touch(Interface *interface, struct point touch_point) {
             
             Button add_button = {SCREEN_WIDTH - BUTTON_WIDTH - 20, HEADER_HEIGHT + 10, BUTTON_WIDTH, BUTTON_HEIGHT, "", 0, 0};
             if (interface_is_point_in_button(touch_point, add_button)) {
-                interface_navigate_to(interface, ADD_PLANT);
+                Plant plant;
+                plant_init(&plant);
+                strncpy(plant.name, "新植物", sizeof(plant.name) - 1);
+                plant.name[sizeof(plant.name) - 1] = '\0';
+                strncpy(plant.variety, "未知品种", sizeof(plant.variety) - 1);
+                plant.variety[sizeof(plant.variety) - 1] = '\0';
+                strncpy(plant.planting_date, "2025-01-01", sizeof(plant.planting_date) - 1);
+                plant.planting_date[sizeof(plant.planting_date) - 1] = '\0';
+                plant.water_frequency = 3;
+                strncpy(plant.last_water_date, "2025-01-01", sizeof(plant.last_water_date) - 1);
+                plant.last_water_date[sizeof(plant.last_water_date) - 1] = '\0';
+                strncpy(plant.last_fertilize_date, "2025-01-01", sizeof(plant.last_fertilize_date) - 1);
+                plant.last_fertilize_date[sizeof(plant.last_fertilize_date) - 1] = '\0';
+                strncpy(plant.status, "正常", sizeof(plant.status) - 1);
+                plant.status[sizeof(plant.status) - 1] = '\0';
+                strncpy(plant.notes, "", sizeof(plant.notes) - 1);
+                plant.notes[sizeof(plant.notes) - 1] = '\0';
+                DAO_RESULT r = plants_dao_add(&plant);
+                if (r == DAO_SUCCESS) {
+                    interface_get_plants(interface);
+                    interface_draw_plant_list(interface);
+                }
                 return;
             }
             
@@ -357,22 +521,146 @@ void interface_handle_touch(Interface *interface, struct point touch_point) {
                 return;
             }
             
-            // 计算"查看养护记录"和"编辑植物"按钮的位置
+            // 计算按钮位置（考虑可能显示的养护经验）
+            Plant *plant = NULL;
+            for (int i = 0; i < interface->plant_count; i++) {
+                if (interface->plants[i].id == interface->selected_plant_id) {
+                    plant = &interface->plants[i];
+                    break;
+                }
+            }
+            
             int detail_y = HEADER_HEIGHT + 20;
             for (int i = 0; i < 6; i++) { // 跳过6行信息显示
                 detail_y += 30;
             }
             
-            Button care_button = {30, detail_y + 50, BUTTON_WIDTH, BUTTON_HEIGHT, "", 0, 0};
-            Button edit_button = {30 + BUTTON_WIDTH + 20, detail_y + 50, BUTTON_WIDTH, BUTTON_HEIGHT, "", 0, 0};
+            // 如果有养护经验，需要额外空间
+            if (plant) {
+                CareExperience* experience = interface_find_experience_by_variety(interface, plant->variety);
+                if (experience) {
+                    detail_y += 55; // 养护经验显示区域
+                }
+            }
+            
+            Button care_button = {30, detail_y + 40, BUTTON_WIDTH, BUTTON_HEIGHT, "", 0, 0};
+            Button growth_button = {30 + BUTTON_WIDTH + 20, detail_y + 40, BUTTON_WIDTH, BUTTON_HEIGHT, "", 0, 0};
+            Button edit_button = {30, detail_y + BUTTON_HEIGHT + 50, BUTTON_WIDTH, BUTTON_HEIGHT, "", 0, 0};
             
             if (interface_is_point_in_button(touch_point, care_button)) {
                 interface_navigate_to(interface, CARE_RECORDS);
                 return;
             }
             
+            if (interface_is_point_in_button(touch_point, growth_button)) {
+                interface_navigate_to(interface, GROWTH_RECORDS);
+                return;
+            }
+            
             if (interface_is_point_in_button(touch_point, edit_button)) {
-                // 编辑植物功能暂未实现
+                if (interface->selected_plant_id > 0) {
+                    Plant p;
+                    plant_init(&p);
+                    if (plants_dao_get_by_id(interface->selected_plant_id, &p) == DAO_SUCCESS) {
+                        if (strcmp(p.status, "正常") == 0) {
+                            strncpy(p.status, "良好", sizeof(p.status) - 1);
+                            p.status[sizeof(p.status) - 1] = '\0';
+                        } else {
+                            strncpy(p.status, "正常", sizeof(p.status) - 1);
+                            p.status[sizeof(p.status) - 1] = '\0';
+                        }
+                        plants_dao_update(interface->selected_plant_id, &p);
+                        interface_get_plants(interface);
+                        interface_draw_plant_detail(interface, interface->selected_plant_id);
+                    }
+                }
+                return;
+            }
+            break;
+
+        case CARE_RECORDS:
+            if (touch_point.y >= SCREEN_HEIGHT - FOOTER_HEIGHT) {
+                interface_navigate_to(interface, PLANT_DETAIL);
+                return;
+            }
+
+            {
+                Button add_record_btn = {SCREEN_WIDTH - BUTTON_WIDTH - 20, HEADER_HEIGHT + 10, BUTTON_WIDTH, BUTTON_HEIGHT, "", 0, 0};
+                if (interface_is_point_in_button(touch_point, add_record_btn)) {
+                    if (interface->selected_plant_id > 0) {
+                        CareRecord record;
+                        care_record_init(&record);
+                        record.plant_id = interface->selected_plant_id;
+                        record.operation_type = CARE_WATER;
+                        time_t t = time(NULL);
+                        struct tm *tm_info = localtime(&t);
+                        char datetime_str[20];
+                        strftime(datetime_str, 20, "%Y-%m-%d %H:%M:%S", tm_info);
+                        strncpy(record.operation_date, datetime_str, sizeof(record.operation_date) - 1);
+                        record.operation_date[sizeof(record.operation_date) - 1] = '\0';
+                        strncpy(record.details, "自动添加的养护记录", sizeof(record.details) - 1);
+                        record.details[sizeof(record.details) - 1] = '\0';
+                        strncpy(record.amount, "500ml", sizeof(record.amount) - 1);
+                        record.amount[sizeof(record.amount) - 1] = '\0';
+                        DAO_RESULT r = care_records_dao_add(&record);
+                        if (r == DAO_SUCCESS) {
+                            interface_get_care_records(interface, interface->selected_plant_id);
+                            interface_draw_care_records(interface, interface->selected_plant_id);
+                        }
+                    }
+                    return;
+                }
+            }
+            break;
+            
+        case GROWTH_RECORDS:
+            if (touch_point.y >= SCREEN_HEIGHT - FOOTER_HEIGHT) {
+                interface_navigate_to(interface, PLANT_DETAIL);
+                return;
+            }
+
+            {
+                Button add_record_btn = {SCREEN_WIDTH - BUTTON_WIDTH - 20, HEADER_HEIGHT + 10, BUTTON_WIDTH, BUTTON_HEIGHT, "", 0, 0};
+                if (interface_is_point_in_button(touch_point, add_record_btn)) {
+                    if (interface->selected_plant_id > 0) {
+                        GrowthRecord record;
+                        growth_record_init(&record);
+                        record.plant_id = interface->selected_plant_id;
+                        time_t t = time(NULL);
+                        struct tm *tm_info = localtime(&t);
+                        char date_str[11];
+                        strftime(date_str, 11, "%Y-%m-%d", tm_info);
+                        strncpy(record.record_date, date_str, sizeof(record.record_date) - 1);
+                        record.record_date[sizeof(record.record_date) - 1] = '\0';
+                        record.height_cm = 25.0;
+                        record.leaf_count = 10;
+                        record.bud_count = 2;
+                        record.flower_count = 1;
+                        record.health_score = 80;
+                        strncpy(record.leaf_color, "绿色", sizeof(record.leaf_color) - 1);
+                        record.leaf_color[sizeof(record.leaf_color) - 1] = '\0';
+                        strncpy(record.growth_vigor, "良好", sizeof(record.growth_vigor) - 1);
+                        record.growth_vigor[sizeof(record.growth_vigor) - 1] = '\0';
+                        record.temperature = 22;
+                        record.humidity = 65;
+                        strncpy(record.light_exposure, "充足", sizeof(record.light_exposure) - 1);
+                        record.light_exposure[sizeof(record.light_exposure) - 1] = '\0';
+                        strncpy(record.notes, "自动添加的生长记录", sizeof(record.notes) - 1);
+                        record.notes[sizeof(record.notes) - 1] = '\0';
+                        DAO_RESULT r = growth_records_dao_add(&record);
+                        if (r == DAO_SUCCESS) {
+                            interface_get_growth_records(interface, interface->selected_plant_id);
+                            interface_draw_growth_records(interface, interface->selected_plant_id);
+                        }
+                    }
+                    return;
+                }
+            }
+            break;
+            
+        case CARE_EXPERIENCE:
+            if (touch_point.y >= SCREEN_HEIGHT - FOOTER_HEIGHT) {
+                interface_navigate_to(interface, MAIN_MENU);
                 return;
             }
             break;
@@ -458,6 +746,75 @@ static int interface_get_reminders(Interface *interface) {
     }
     
     return interface->reminder_count;
+}
+
+// 获取特定植物的生长记录
+static int interface_get_growth_records(Interface *interface, int plant_id) {
+    // 重置计数器
+    interface->growth_record_count = 0;
+    
+    // 确保有足够的容量
+    if (interface->growth_records_capacity < 10) {
+        interface->growth_records_capacity = 10;
+        interface->growth_records = realloc(interface->growth_records, interface->growth_records_capacity * sizeof(GrowthRecord));
+    }
+    
+    // 保存接口实例以便在回调函数中使用
+    interface_instance = interface;
+    
+    // 调用DAO层获取指定植物的所有生长记录
+    DAO_RESULT result = growth_records_dao_get_by_plant(plant_id, growth_records_collect_callback);
+    
+    if (result != DAO_SUCCESS) {
+        printf("获取生长记录失败\n");
+        return -1;
+    }
+    
+    return interface->growth_record_count;
+}
+
+// 获取养护经验数据
+static int interface_get_care_experiences(Interface *interface) {
+    // 重置计数器
+    interface->care_experience_count = 0;
+    
+    // 确保有足够的容量
+    if (interface->care_experiences_capacity < 10) {
+        interface->care_experiences_capacity = 10;
+        interface->care_experiences = realloc(interface->care_experiences, interface->care_experiences_capacity * sizeof(CareExperience));
+    }
+    
+    // 保存接口实例以便在回调函数中使用
+    interface_instance = interface;
+    
+    // 调用DAO层获取所有养护经验数据
+    DAO_RESULT result = care_experience_dao_get_all(care_experiences_collect_callback);
+    
+    if (result != DAO_SUCCESS) {
+        printf("获取养护经验数据失败\n");
+        return -1;
+    }
+    
+    return interface->care_experience_count;
+}
+
+// 根据品种查找养护经验
+static CareExperience* interface_find_experience_by_variety(Interface *interface, const char *variety) {
+    if (!variety || strlen(variety) == 0) return NULL;
+    
+    // 确保已加载养护经验数据
+    if (interface->care_experience_count == 0) {
+        interface_get_care_experiences(interface);
+    }
+    
+    // 查找匹配的养护经验
+    for (int i = 0; i < interface->care_experience_count; i++) {
+        if (strcmp(interface->care_experiences[i].variety, variety) == 0) {
+            return &interface->care_experiences[i];
+        }
+    }
+    
+    return NULL;
 }
 
 void interface_draw_care_records(Interface *interface, int plant_id) {
@@ -583,6 +940,130 @@ void interface_draw_reminders(Interface *interface) {
     interface_draw_footer(interface);
 }
 
+void interface_draw_growth_records(Interface *interface, int plant_id) {
+    // 获取植物信息用于标题显示
+    Plant plant_info;
+    plant_init(&plant_info);
+    DAO_RESULT result = plants_dao_get_by_id(plant_id, &plant_info);
+    
+    LCD_show_rec(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, BACKGROUND_COLOR, interface->lcd.plcd);
+    
+    char title[100];
+    if (result == DAO_SUCCESS) {
+        snprintf(title, sizeof(title), "%s的生长记录", plant_info.name);
+    } else {
+        snprintf(title, sizeof(title), "生长记录 (ID: %d)", plant_id);
+    }
+    
+    interface_draw_header(interface, title);
+    
+    Button add_button = {SCREEN_WIDTH - BUTTON_WIDTH - 20, HEADER_HEIGHT + 10, BUTTON_WIDTH, BUTTON_HEIGHT, "添加记录", BUTTON_COLOR, TEXT_COLOR};
+    interface_draw_button(interface, &add_button);
+    
+    int start_y = HEADER_HEIGHT + BUTTON_HEIGHT + 30;
+    int item_height = 80;
+    
+    // 获取生长记录数据
+    interface_get_growth_records(interface, plant_id);
+    
+    if (interface->growth_record_count == 0) {
+        const char *no_records = "暂无生长记录";
+        int text_x = (SCREEN_WIDTH - strlen(no_records) * 8) / 2;
+        int text_y = start_y + 50;
+        
+        showString(interface->lcd.plcd, no_records, 16, TEXT_COLOR, text_x, text_y, BACKGROUND_COLOR);
+    } else {
+        for (int i = 0; i < interface->growth_record_count && i < 4; i++) {
+            int y = start_y + i * item_height;
+            
+            LCD_show_rec(20, y, SCREEN_WIDTH - 40, item_height - 5, 0xF5F5F5, interface->lcd.plcd);
+            
+            // 显示记录日期
+            char date_info[100];
+            snprintf(date_info, sizeof(date_info), "%s", interface->growth_records[i].record_date);
+            showString(interface->lcd.plcd, date_info, 16, TEXT_COLOR, 30, y + 5, 0xF5F5F5);
+            
+            // 显示生长指标
+            char growth_info[150];
+            snprintf(growth_info, sizeof(growth_info), "高度: %.1fcm | 叶片: %d | 花朵: %d | 健康: %d分", 
+                     interface->growth_records[i].height_cm,
+                     interface->growth_records[i].leaf_count,
+                     interface->growth_records[i].flower_count,
+                     interface->growth_records[i].health_score);
+            showString(interface->lcd.plcd, growth_info, 14, 0x666666, 30, y + 25, 0xF5F5F5);
+            
+            // 显示环境信息
+            char env_info[150];
+            snprintf(env_info, sizeof(env_info), "温度: %d°C | 湿度: %d%% | 光照: %s", 
+                     interface->growth_records[i].temperature,
+                     interface->growth_records[i].humidity,
+                     interface->growth_records[i].light_exposure);
+            showString(interface->lcd.plcd, env_info, 14, 0x666666, 30, y + 45, 0xF5F5F5);
+        }
+    }
+    
+    interface_draw_footer(interface);
+}
+
+void interface_draw_care_experience(Interface *interface) {
+    LCD_show_rec(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, BACKGROUND_COLOR, interface->lcd.plcd);
+    interface_draw_header(interface, "养护经验库");
+    
+    // 获取养护经验数据
+    interface_get_care_experiences(interface);
+    
+    int start_y = HEADER_HEIGHT + 20;
+    int item_height = 120;
+    
+    if (interface->care_experience_count == 0) {
+        const char *no_experiences = "暂无养护经验";
+        int text_x = (SCREEN_WIDTH - strlen(no_experiences) * 8) / 2;
+        int text_y = start_y + 50;
+        
+        showString(interface->lcd.plcd, no_experiences, 16, TEXT_COLOR, text_x, text_y, BACKGROUND_COLOR);
+    } else {
+        for (int i = 0; i < interface->care_experience_count && i < 3; i++) {
+            int y = start_y + i * item_height;
+            
+            LCD_show_rec(20, y, SCREEN_WIDTH - 40, item_height - 5, 0xF5F5F5, interface->lcd.plcd);
+            
+            // 显示品种名称
+            char variety_info[100];
+            snprintf(variety_info, sizeof(variety_info), "品种: %s (置信度: %d/5)", 
+                     interface->care_experiences[i].variety,
+                     interface->care_experiences[i].confidence_level);
+            showString(interface->lcd.plcd, variety_info, 16, TEXT_COLOR, 30, y + 5, 0xF5F5F5);
+            
+            // 显示最佳养护频率
+            char frequency_info[150];
+            snprintf(frequency_info, sizeof(frequency_info), "浇水: %d天 | 施肥: %d天 | 最佳季节: %s", 
+                     interface->care_experiences[i].optimal_water_frequency,
+                     interface->care_experiences[i].optimal_fertilize_frequency,
+                     interface->care_experiences[i].best_season);
+            showString(interface->lcd.plcd, frequency_info, 14, 0x666666, 30, y + 25, 0xF5F5F5);
+            
+            // 显示统计信息
+            char stats_info[150];
+            snprintf(stats_info, sizeof(stats_info), "成功率: %.1f%% | 平均健康: %.1f | 养护数量: %d", 
+                     interface->care_experiences[i].success_rate,
+                     interface->care_experiences[i].avg_health_score,
+                     interface->care_experiences[i].total_plants);
+            showString(interface->lcd.plcd, stats_info, 14, 0x666666, 30, y + 45, 0xF5F5F5);
+            
+            // 显示常见问题
+            char problems_info[150];
+            strncpy(problems_info, interface->care_experiences[i].common_mistakes, sizeof(problems_info) - 1);
+            problems_info[sizeof(problems_info) - 1] = '\0';
+            if (strlen(interface->care_experiences[i].common_mistakes) > 30) {
+                strcpy(problems_info + 27, "...");
+            }
+            showString(interface->lcd.plcd, problems_info, 12, 0x888888, 30, y + 65, 0xF5F5F5);
+        }
+    }
+    
+    interface_draw_footer(interface);
+}
+
 void interface_navigate_to(Interface *interface, ScreenType screen) {
     interface->current_screen = screen;
     
@@ -595,13 +1076,21 @@ void interface_navigate_to(Interface *interface, ScreenType screen) {
             interface_draw_plant_list(interface);
             break;
         case PLANT_DETAIL:
+            // 确保已加载养护经验数据以便显示
+            interface_get_care_experiences(interface);
             interface_draw_plant_detail(interface, interface->selected_plant_id);
             break;
         case CARE_RECORDS:
             interface_draw_care_records(interface, interface->selected_plant_id);
             break;
+        case GROWTH_RECORDS:
+            interface_draw_growth_records(interface, interface->selected_plant_id);
+            break;
         case REMINDERS:
             interface_draw_reminders(interface);
+            break;
+        case CARE_EXPERIENCE:
+            interface_draw_care_experience(interface);
             break;
         default:
             interface_draw_main_menu(interface);
