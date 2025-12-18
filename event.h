@@ -9,7 +9,9 @@ struct point
 };
 
 //定义一个触摸屏信息结构体
-#include <linux/input.h> 
+#ifdef __linux__
+#include <linux/input.h>
+#endif 
 
 /*
 **函数功能：获取触摸的坐标
