@@ -53,6 +53,9 @@ DAO_RESULT reminders_dao_get_by_id(int reminder_id, Reminder* reminder);
 // 查询花卉的所有提醒设置
 DAO_RESULT reminders_dao_get_by_plant(int plant_id, void (*callback)(const Reminder* reminder));
 
+// 查询所有提醒设置
+DAO_RESULT reminders_dao_get_all(void (*callback)(const Reminder* reminder));
+
 // 根据条件查询提醒设置
 DAO_RESULT reminders_dao_query(const ReminderQuery* query, void (*callback)(const Reminder* reminder));
 

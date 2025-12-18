@@ -143,17 +143,50 @@ static int reminders_query_callback(void* data, int argc, char** argv, char** co
     return 0;
 }
 
+// 根据ID查询单条提醒记录的回调函数
+static int reminders_get_by_id_callback(void* data, int argc, char** argv, char** col_names) {
+    Reminder* reminder = (Reminder*)data;
+    
+    // 如果没有记录，保持id为-1
+    if (argc == 0) {
+        return 0;
+    }
+    
+    for (int i = 0; i < argc; i++) {
+        if (argv[i] == NULL) continue;
+        
+        if (strcmp(col_names[i], "id") == 0) {
+            reminder->id = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "plant_id") == 0) {
+            reminder->plant_id = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "reminder_type") == 0) {
+            reminder->reminder_type = string_to_reminder_type(argv[i]);
+        } else if (strcmp(col_names[i], "frequency") == 0) {
+            reminder->frequency = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "last_reminder_date") == 0) {
+            dao_strncpy_safe(reminder->last_reminder_date, argv[i], sizeof(reminder->last_reminder_date));
+        } else if (strcmp(col_names[i], "is_active") == 0) {
+            reminder->is_active = atoi(argv[i]);
+        }
+    }
+    
+    return 0;
+}
+
 // 根据ID查询提醒设置
 DAO_RESULT reminders_dao_get_by_id(int reminder_id, Reminder* reminder) {
     DAO_CHECK_PARAM(reminder_id > 0);
     DAO_CHECK_PARAM(reminder != NULL);
+    
+    // 初始化提醒
+    reminder_init(reminder);
     
     char *err_msg = NULL;
     char sql[256];
     
     snprintf(sql, sizeof(sql), "SELECT * FROM reminders WHERE id=%d", reminder_id);
     
-    int rc = sqlite3_exec(db, sql, reminders_query_callback, reminder, &err_msg);
+    int rc = sqlite3_exec(db, sql, reminders_get_by_id_callback, reminder, &err_msg);
     
     if (rc != SQLITE_OK) {
         DAO_CHECK_SQL(rc, err_msg);
@@ -180,6 +213,21 @@ DAO_RESULT reminders_dao_get_by_plant(int plant_id, void (*callback)(const Remin
              plant_id);
     
     int rc = sqlite3_exec(db, sql, reminders_query_callback, (void*)callback, &err_msg);
+    
+    if (rc != SQLITE_OK) {
+        DAO_CHECK_SQL(rc, err_msg);
+        return DAO_DB_ERROR;
+    }
+    
+    return DAO_SUCCESS;
+}
+
+// 查询所有提醒设置
+DAO_RESULT reminders_dao_get_all(void (*callback)(const Reminder* reminder)) {
+    char *err_msg = NULL;
+    
+    int rc = sqlite3_exec(db, "SELECT * FROM reminders ORDER BY plant_id, reminder_type", 
+                         reminders_query_callback, (void*)callback, &err_msg);
     
     if (rc != SQLITE_OK) {
         DAO_CHECK_SQL(rc, err_msg);

@@ -112,17 +112,50 @@ static int care_records_query_callback(void* data, int argc, char** argv, char**
     return 0;
 }
 
+// 根据ID查询单条记录的回调函数
+static int care_records_get_by_id_callback(void* data, int argc, char** argv, char** col_names) {
+    CareRecord* record = (CareRecord*)data;
+    
+    // 如果没有记录，保持id为-1
+    if (argc == 0) {
+        return 0;
+    }
+    
+    for (int i = 0; i < argc; i++) {
+        if (argv[i] == NULL) continue;
+        
+        if (strcmp(col_names[i], "id") == 0) {
+            record->id = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "plant_id") == 0) {
+            record->plant_id = atoi(argv[i]);
+        } else if (strcmp(col_names[i], "operation_type") == 0) {
+            record->operation_type = string_to_care_type(argv[i]);
+        } else if (strcmp(col_names[i], "operation_date") == 0) {
+            dao_strncpy_safe(record->operation_date, argv[i], sizeof(record->operation_date));
+        } else if (strcmp(col_names[i], "details") == 0) {
+            dao_strncpy_safe(record->details, argv[i], sizeof(record->details));
+        } else if (strcmp(col_names[i], "amount") == 0) {
+            dao_strncpy_safe(record->amount, argv[i], sizeof(record->amount));
+        }
+    }
+    
+    return 0;
+}
+
 // 根据ID查询养护记录
 DAO_RESULT care_records_dao_get_by_id(int record_id, CareRecord* record) {
     DAO_CHECK_PARAM(record_id > 0);
     DAO_CHECK_PARAM(record != NULL);
+    
+    // 初始化记录
+    care_record_init(record);
     
     char *err_msg = NULL;
     char sql[256];
     
     snprintf(sql, sizeof(sql), "SELECT * FROM care_records WHERE id=%d", record_id);
     
-    int rc = sqlite3_exec(db, sql, care_records_query_callback, record, &err_msg);
+    int rc = sqlite3_exec(db, sql, care_records_get_by_id_callback, record, &err_msg);
     
     if (rc != SQLITE_OK) {
         DAO_CHECK_SQL(rc, err_msg);
