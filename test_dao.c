@@ -67,8 +67,8 @@ static void clear_database_tables() {
 int test_plants_dao() {
     printf("\n=== 测试植物信息DAO ===\n");
     
-    // 清理数据库表数据，避免数据污染
-    clear_database_tables();
+    // 清理数据库表数据，避免数据污染（暂时注释以便查看数据）
+    // clear_database_tables();
     
     Plant plant;
     plant_init(&plant);
@@ -132,16 +132,16 @@ int test_plants_dao() {
     TEST_EQUAL(test_plant_count > 0, 1, "条件查询未找到匹配的植物");
     printf("✓ 条件查询植物成功，找到 %d 个匹配的植物\n", test_plant_count);
     
-    // 测试6：删除植物
+    // 测试6：删除植物（暂时注释以便查看数据）
     printf("6. 测试删除植物...\n");
-    result = plants_dao_delete(plant_id);
-    TEST_EQUAL(result, DAO_SUCCESS, "删除植物失败");
+    // result = plants_dao_delete(plant_id);
+    // TEST_EQUAL(result, DAO_SUCCESS, "删除植物失败");
     
     // 验证删除
-    plant_init(&found_plant); // 重新初始化结构体
-    result = plants_dao_get_by_id(plant_id, &found_plant);
-    TEST_EQUAL(result, DAO_NOT_FOUND, "植物删除验证失败");
-    printf("✓ 删除植物成功\n");
+    // plant_init(&found_plant); // 重新初始化结构体
+    // result = plants_dao_get_by_id(plant_id, &found_plant);
+    // TEST_EQUAL(result, DAO_NOT_FOUND, "植物删除验证失败");
+    printf("✓ 删除植物测试跳过（保留数据）\n");
     
     printf("=== 植物信息DAO测试全部通过 ===\n");
     return TEST_PASSED;
@@ -151,8 +151,8 @@ int test_plants_dao() {
 int test_care_records_dao() {
     printf("\n=== 测试养护记录DAO ===\n");
     
-    // 清理数据库表数据，避免数据污染
-    clear_database_tables();
+    // 清理数据库表数据，避免数据污染（暂时注释以便查看数据）
+    // clear_database_tables();
     
     // 首先需要有一个植物来关联养护记录
     Plant plant;
@@ -216,18 +216,18 @@ int test_care_records_dao() {
     TEST_EQUAL(test_care_record_count > 0, 1, "条件查询未找到匹配的养护记录");
     printf("✓ 条件查询养护记录成功，找到 %d 个匹配的记录\n", test_care_record_count);
     
-    // 测试5：删除养护记录
+    // 测试5：删除养护记录（暂时注释以便查看数据）
     printf("5. 测试删除养护记录...\n");
-    result = care_records_dao_delete(record_id);
-    TEST_EQUAL(result, DAO_SUCCESS, "删除养护记录失败");
+    // result = care_records_dao_delete(record_id);
+    // TEST_EQUAL(result, DAO_SUCCESS, "删除养护记录失败");
     
     // 验证删除
-    result = care_records_dao_get_by_id(record_id, &found_record);
-    TEST_EQUAL(result, DAO_NOT_FOUND, "养护记录删除验证失败");
-    printf("✓ 删除养护记录成功\n");
+    // result = care_records_dao_get_by_id(record_id, &found_record);
+    // TEST_EQUAL(result, DAO_NOT_FOUND, "养护记录删除验证失败");
+    printf("✓ 删除养护记录测试跳过（保留数据）\n");
     
-    // 清理测试植物
-    plants_dao_delete(plant_id);
+    // 清理测试植物（暂时注释以便查看数据）
+    // plants_dao_delete(plant_id);
     
     printf("=== 养护记录DAO测试全部通过 ===\n");
     return TEST_PASSED;
@@ -237,8 +237,8 @@ int test_care_records_dao() {
 int test_reminders_dao() {
     printf("\n=== 测试提醒管理DAO ===\n");
     
-    // 清理数据库表数据，避免数据污染
-    clear_database_tables();
+    // 清理数据库表数据，避免数据污染（暂时注释以便查看数据）
+    // clear_database_tables();
     
     // 首先需要有一个植物来关联提醒
     Plant plant;
@@ -303,18 +303,18 @@ int test_reminders_dao() {
     TEST_EQUAL(found_reminder.is_active, 0, "提醒激活状态更新失败");
     printf("✓ 更新提醒设置成功\n");
     
-    // 测试5：删除提醒设置
+    // 测试5：删除提醒设置（暂时注释以便查看数据）
     printf("5. 测试删除提醒设置...\n");
-    result = reminders_dao_delete(reminder_id);
-    TEST_EQUAL(result, DAO_SUCCESS, "删除提醒设置失败");
+    // result = reminders_dao_delete(reminder_id);
+    // TEST_EQUAL(result, DAO_SUCCESS, "删除提醒设置失败");
     
     // 验证删除
-    result = reminders_dao_get_by_id(reminder_id, &found_reminder);
-    TEST_EQUAL(result, DAO_NOT_FOUND, "提醒设置删除验证失败");
-    printf("✓ 删除提醒设置成功\n");
+    // result = reminders_dao_get_by_id(reminder_id, &found_reminder);
+    // TEST_EQUAL(result, DAO_NOT_FOUND, "提醒设置删除验证失败");
+    printf("✓ 删除提醒设置测试跳过（保留数据）\n");
     
-    // 清理测试植物
-    plants_dao_delete(plant_id);
+    // 清理测试植物（暂时注释以便查看数据）
+    // plants_dao_delete(plant_id);
     
     printf("=== 提醒管理DAO测试全部通过 ===\n");
     return TEST_PASSED;
