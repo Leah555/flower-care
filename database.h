@@ -23,4 +23,13 @@ int execute_sql(const char* sql);
 // 检查表是否存在
 int table_exists(const char* table_name);
 
+// 检查所有必需的表是否存在
+int check_tables_exist();
+
+// 手动创建数据库（独立函数，可在任何地方调用）
+int create_database_manually();
+
+// 重置数据库（删除并重新创建）
+int reset_database();
+
 #endif

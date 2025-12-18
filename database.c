@@ -2,18 +2,132 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <sys/stat.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 sqlite3 *db = NULL;
 
+// 检查数据库文件是否存在
+static int database_file_exists(const char *filename) {
+    struct stat buffer;
+    return (stat(filename, &buffer) == 0);
+}
+
+// 创建数据库目录（如果需要）
+static int create_database_directory(const char *path) {
+    char dir_path[256];
+    strncpy(dir_path, path, sizeof(dir_path) - 1);
+    dir_path[sizeof(dir_path) - 1] = '\0';
+    
+    // 找到最后一个'/'的位置
+    char *last_slash = strrchr(dir_path, '/');
+    if (last_slash == NULL) {
+        last_slash = strrchr(dir_path, '\\');
+    }
+    
+    if (last_slash != NULL) {
+        *last_slash = '\0'; // 截断路径，只保留目录部分
+        
+        // 检查目录是否存在
+        struct stat st;
+        if (stat(dir_path, &st) != 0) {
+            // 目录不存在，尝试创建
+            #ifdef _WIN32
+            if (mkdir(dir_path) != 0) {
+            #else
+            if (mkdir(dir_path, 0755) != 0) {
+            #endif
+                fprintf(stderr, "创建数据库目录失败: %s\n", dir_path);
+                return -1;
+            }
+            printf("数据库目录创建成功: %s\n", dir_path);
+        }
+    }
+    
+    return 0;
+}
+
 // 初始化数据库连接
 int init_database() {
-    int rc = sqlite3_open(DATABASE_PATH, &db);
-    if (rc != SQLITE_OK) {
-        fprintf(stderr, "无法打开数据库: %s\n", sqlite3_errmsg(db));
+    // 检查数据库文件是否存在
+    int db_exists = database_file_exists(DATABASE_PATH);
+    
+    // 创建数据库目录（如果需要）
+    if (create_database_directory(DATABASE_PATH) != 0) {
+        fprintf(stderr, "创建数据库目录失败\n");
         return -1;
     }
     
-    printf("数据库连接成功\n");
+    // 打开数据库连接
+    int rc = sqlite3_open(DATABASE_PATH, &db);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "无法打开数据库: %s\n", sqlite3_errmsg(db));
+        
+        // 尝试重新创建数据库文件
+        fprintf(stderr, "尝试重新创建数据库文件...\n");
+        
+        // 如果db指针不为NULL，先关闭
+        if (db) {
+            sqlite3_close(db);
+            db = NULL;
+        }
+        
+        // 删除损坏的数据库文件
+        if (remove(DATABASE_PATH) == 0) {
+            printf("已删除损坏的数据库文件\n");
+        }
+        
+        // 重新尝试打开
+        rc = sqlite3_open(DATABASE_PATH, &db);
+        if (rc != SQLITE_OK) {
+            fprintf(stderr, "重新创建数据库失败: %s\n", sqlite3_errmsg(db));
+            return -1;
+        }
+        
+        printf("数据库文件重新创建成功\n");
+    } else {
+        if (db_exists) {
+            printf("数据库连接成功（使用现有数据库）\n");
+        } else {
+            printf("数据库连接成功（创建新数据库）\n");
+        }
+    }
+    
+    // 启用外键约束
+    rc = sqlite3_exec(db, "PRAGMA foreign_keys = ON;", 0, 0, 0);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "启用外键约束失败: %s\n", sqlite3_errmsg(db));
+        sqlite3_close(db);
+        db = NULL;
+        return -1;
+    }
+    
+    // 如果数据库是新创建的，创建表结构
+    if (!db_exists) {
+        if (create_tables() != 0) {
+            fprintf(stderr, "创建表结构失败\n");
+            sqlite3_close(db);
+            db = NULL;
+            return -1;
+        }
+    } else {
+        // 检查表是否存在，如果不存在则创建
+        if (check_tables_exist() != 0) {
+            fprintf(stderr, "检查表结构失败，尝试重新创建表...\n");
+            if (create_tables() != 0) {
+                fprintf(stderr, "重新创建表结构失败\n");
+                sqlite3_close(db);
+                db = NULL;
+                return -1;
+            }
+        }
+    }
+    
+    printf("数据库初始化完成\n");
     return 0;
 }
 
@@ -131,4 +245,165 @@ int table_exists(const char* table_name) {
     }
     
     return exists;
+}
+
+// 检查所有必需的表是否存在
+int check_tables_exist() {
+    const char* required_tables[] = {"plants", "care_records", "reminders"};
+    int table_count = sizeof(required_tables) / sizeof(required_tables[0]);
+    
+    for (int i = 0; i < table_count; i++) {
+        int exists = table_exists(required_tables[i]);
+        if (exists == -1) {
+            return -1; // 检查过程出错
+        }
+        if (exists == 0) {
+            fprintf(stderr, "必需的表不存在: %s\n", required_tables[i]);
+            return -1;
+        }
+    }
+    
+    printf("所有必需的表都存在\n");
+    return 0;
+}
+
+// 手动创建数据库（独立函数，可在任何地方调用）
+int create_database_manually() {
+    printf("开始手动创建数据库...\n");
+    
+    // 检查并创建目录
+    if (create_database_directory(DATABASE_PATH) != 0) {
+        fprintf(stderr, "创建数据库目录失败\n");
+        return -1;
+    }
+    
+    // 如果数据库文件已存在，先备份
+    if (database_file_exists(DATABASE_PATH)) {
+        char backup_path[256];
+        snprintf(backup_path, sizeof(backup_path), "%s.backup", DATABASE_PATH);
+        
+        if (rename(DATABASE_PATH, backup_path) == 0) {
+            printf("已备份原有数据库文件: %s\n", backup_path);
+        } else {
+            fprintf(stderr, "备份数据库文件失败，继续创建新数据库\n");
+        }
+    }
+    
+    // 创建新的数据库连接
+    sqlite3 *temp_db = NULL;
+    int rc = sqlite3_open(DATABASE_PATH, &temp_db);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "创建数据库文件失败: %s\n", sqlite3_errmsg(temp_db));
+        if (temp_db) sqlite3_close(temp_db);
+        return -1;
+    }
+    
+    // 启用外键约束
+    rc = sqlite3_exec(temp_db, "PRAGMA foreign_keys = ON;", 0, 0, 0);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "启用外键约束失败: %s\n", sqlite3_errmsg(temp_db));
+        sqlite3_close(temp_db);
+        return -1;
+    }
+    
+    // 创建表结构
+    char *err_msg = NULL;
+    const char* create_tables_sql[] = {
+        "CREATE TABLE IF NOT EXISTS plants ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "name VARCHAR(50) NOT NULL,"
+        "variety VARCHAR(50),"
+        "planting_date DATE,"
+        "water_frequency INTEGER,"
+        "last_water_date DATE,"
+        "last_fertilize_date DATE,"
+        "status VARCHAR(20) DEFAULT '正常',"
+        "notes TEXT"
+        ");",
+        
+        "CREATE TABLE IF NOT EXISTS care_records ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "plant_id INTEGER NOT NULL,"
+        "operation_type VARCHAR(20) NOT NULL,"
+        "operation_date DATETIME NOT NULL,"
+        "details TEXT,"
+        "amount VARCHAR(20),"
+        "FOREIGN KEY (plant_id) REFERENCES plants(id)"
+        ");",
+        
+        "CREATE TABLE IF NOT EXISTS reminders ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "plant_id INTEGER NOT NULL,"
+        "reminder_type VARCHAR(20) NOT NULL,"
+        "frequency INTEGER NOT NULL,"
+        "last_reminder_date DATE,"
+        "is_active BOOLEAN DEFAULT 1,"
+        "FOREIGN KEY (plant_id) REFERENCES plants(id)"
+        ");"
+    };
+    
+    int table_count = sizeof(create_tables_sql) / sizeof(create_tables_sql[0]);
+    
+    for (int i = 0; i < table_count; i++) {
+        rc = sqlite3_exec(temp_db, create_tables_sql[i], 0, 0, &err_msg);
+        if (rc != SQLITE_OK) {
+            fprintf(stderr, "创建表失败: %s\n", err_msg);
+            sqlite3_free(err_msg);
+            sqlite3_close(temp_db);
+            return -1;
+        }
+    }
+    
+    sqlite3_close(temp_db);
+    printf("手动创建数据库成功: %s\n", DATABASE_PATH);
+    return 0;
+}
+
+// 重置数据库（删除并重新创建）
+int reset_database() {
+    printf("开始重置数据库...\n");
+    
+    // 关闭现有连接
+    if (db) {
+        sqlite3_close(db);
+        db = NULL;
+    }
+    
+    // 等待一小段时间确保文件已释放
+    #ifdef _WIN32
+    Sleep(100);
+    #else
+    usleep(100000); // 100ms
+    #endif
+    
+    // 删除数据库文件
+    if (database_file_exists(DATABASE_PATH)) {
+        int retry_count = 3;
+        int delete_success = 0;
+        
+        for (int i = 0; i < retry_count; i++) {
+            if (remove(DATABASE_PATH) == 0) {
+                printf("已删除数据库文件\n");
+                delete_success = 1;
+                break;
+            } else {
+                fprintf(stderr, "删除数据库文件失败，重试 %d/%d\n", i + 1, retry_count);
+                
+                // 等待后重试
+                #ifdef _WIN32
+                Sleep(100);
+                #else
+                usleep(100000); // 100ms
+                #endif
+            }
+        }
+        
+        if (!delete_success) {
+            fprintf(stderr, "删除数据库文件失败，尝试强制重置\n");
+            // 即使删除失败，也尝试继续创建新数据库
+        }
+    }
+    
+    // 重新创建数据库
+    return create_database_manually();
 }
