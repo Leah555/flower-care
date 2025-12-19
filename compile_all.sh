@@ -13,6 +13,8 @@ arm-linux-gcc \
     dao/plants_dao.c \
     dao/care_records_dao.c \
     dao/reminders_dao.c \
+    dao/growth_records_dao.c \
+    dao/care_experience_dao.c \
     -o main \
     -I ./ \
     -I ./dao \
@@ -36,4 +38,4 @@ echo "arm-linux-gcc event.c lcd.c main.c sqlite3.c -o main -I ./ -L ./ -lfont_1 
 
 echo ""
 echo "Windows版本命令："
-echo "gcc main.c interface.c database.c event.c lcd.c sqlite3.c dao/dao.c dao/dao_common.c dao/plants_dao.c dao/care_records_dao.c dao/reminders_dao.c -o main.exe -I ./ -I ./dao -L ./ -lfont_1 -lm -lpthread -ldl"
+echo "gcc main.c interface.c database.c event.c lcd.c sqlite3.c dao/dao.c dao/dao_common.c dao/plants_dao.c dao/care_records_dao.c dao/reminders_dao.c dao/growth_records_dao.c dao/care_experience_dao.c -o main.exe -I ./ -I ./dao -L ./ -lfont_1 -lm -lpthread -ldl"

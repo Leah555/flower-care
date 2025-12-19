@@ -7,7 +7,9 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdlib.h>
+#ifdef __linux__
 #include <sys/mman.h>
+#endif
 #define color u32
 #define getColor(a, b, c, d) (a|b<<8|c<<16|d<<24)
 

@@ -21,7 +21,7 @@ int main()
     printf("正在初始化花卉养护记录系统...\n");
     
     // 初始化数据库
-    if (!init_database()) {
+    if (init_database() != 0) {
         printf("数据库初始化失败\n");
         return -1;
     }

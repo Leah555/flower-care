@@ -5,7 +5,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
-#if defined(__linux__) || defined(__APPLE__) || defined(__DARWIN__)
+#ifdef __linux__
 #include <sys/mman.h>
 #endif
 #include<stdlib.h>
@@ -20,6 +20,7 @@
 LCD LCD_init()
 {
     LCD f={-1,NULL};
+#ifdef __linux__
     f.fd=open("/dev/fb0",O_RDWR);//打开文件
     if(f.fd==-1)
     {
@@ -34,6 +35,10 @@ LCD LCD_init()
         close(f.fd); //关闭文件
         return f;
     }
+#else
+    // Windows平台模拟LCD初始化
+    printf("LCD initialized (simulated on Windows)\n");
+#endif
 
     return f;
 }
@@ -67,8 +72,13 @@ void LCD_show_point(int x,int y,int color,int *plcd)
 */
 void LCD_close(int fd,int *plcd)
 {
+#ifdef __linux__
     munmap(plcd,800*480*4);
     close(fd);
+#else
+    // Windows平台不需要实际关闭
+    printf("LCD closed (simulated on Windows)\n");
+#endif
 }
 
 /*
